@@ -3,7 +3,7 @@ package analysis
 import (
 	"context"
 
-	"github.com/sdkim96/rag/job"
+	"github.com/sdkim96/indexing/job"
 )
 
 // AnalysisInput represents an input for analysis, which can be either a URL or raw data.

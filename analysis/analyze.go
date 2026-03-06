@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sdkim96/rag/job"
-	"github.com/sdkim96/rag/part"
+	"github.com/sdkim96/indexing/job"
+	"github.com/sdkim96/indexing/part"
 )
 
 const MaxPollInterval = 60 * time.Second

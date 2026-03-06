@@ -3,7 +3,7 @@ package job
 import (
 	"strconv"
 
-	"github.com/sdkim96/rag/cache"
+	"github.com/sdkim96/indexing/cache"
 )
 
 type File struct {
