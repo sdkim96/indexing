@@ -47,7 +47,5 @@ func (t TableData) GetType() DataType {
 
 // Image is a struct that represents the metadata of an image, including its key, MIME type, and size in bytes.
 type Image struct {
-	Key      string `json:"key"`
-	MimeType string `json:"mime_type"`
-	Size     int64  `json:"size"`
+	Key string `json:"key"`
 }

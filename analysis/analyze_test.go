@@ -137,11 +137,11 @@ func TestDo_Integration(t *testing.T) {
 	if endpoint == "" || apiKey == "" {
 		t.Skip("AZURE_AI_SERVICES_ENDPOINT and AZURE_AI_FOUNDARY_API_KEY not set, skipping integration test")
 	}
-	pdfBytes, err := os.ReadFile("testdata/test_pdf.pdf")
+	pdfBytes, err := os.ReadFile("testdata/cowboys.pdf")
 	if err != nil {
 		t.Fatalf("failed to read test pdf: %v", err)
 	}
-	f := job.File{Name: "test_pdf.pdf", Bytes: pdfBytes, MimeType: "application/pdf"}
+	f := job.File{Name: "cowboys.pdf", Bytes: pdfBytes, MimeType: "application/pdf"}
 	j := job.NewJob("integration-1", "key-1", f)
 
 	ch := make(chan analysis.FigureRequest, 5)
@@ -176,7 +176,7 @@ func TestDo_Integration(t *testing.T) {
 	wg.Wait()
 
 	b, _ := json.MarshalIndent(result.Parts, "", "  ")
-	os.WriteFile("testdata/test_result.json", b, 0644)
+	os.WriteFile("testdata/result_cowboys.json", b, 0644)
 	t.Logf("got %d parts", len(result.Parts))
 
 }
@@ -207,14 +207,19 @@ func TestGetFigure(t *testing.T) {
 func TestConvertToParts(t *testing.T) {
 	fileID := "fake-file-id"
 	ch := make(chan analysis.FigureRequest, 5)
+
 	var op analysis.Operation
-	data, _ := os.ReadFile("testdata/test_pdf.json")
+	data, _ := os.ReadFile("testdata/cowboys.json")
 
 	json.Unmarshal(data, &op)
 	parts := analysis.ConvertToParts(fileID, op, ch)
-	defer close(ch)
+	close(ch)
+
 	b, _ := json.MarshalIndent(parts, "", "  ")
+	os.WriteFile("testdata/cowboys_converted_parts.json", b, 0644)
 	t.Logf("converted parts: %s", string(b))
-	sig := <-ch
-	t.Logf("%v", sig)
+
+	for sig := range ch {
+		t.Logf("%v", sig)
+	}
 }

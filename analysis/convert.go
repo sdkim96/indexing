@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,59 +17,131 @@ func ConvertToParts(fileID string, result Operation, figCh chan<- FigureRequest)
 	var parts []part.Part
 
 	for contentIdx, content := range result.Result.Contents {
-		for _, section := range content.Sections {
-			for _, elem := range section.Elements {
-				switch {
-				case strings.HasPrefix(elem, "/paragraphs/"):
-					idx := parseIndex(elem)
-					if idx < 0 || idx >= len(content.Paragraphs) {
-						continue
-					}
-					p := content.Paragraphs[idx]
-					page := findPageNumber(content.Pages, p.Span.Offset)
-					parts = append(parts, part.NewTextPart(fileID, page, p.Span.Offset, p.Content))
+		if len(content.Sections) == 0 {
+			continue
+		}
 
-				case strings.HasPrefix(elem, "/tables/"):
-					idx := parseIndex(elem)
-					if idx < 0 || idx >= len(content.Tables) {
-						continue
-					}
-					t := content.Tables[idx]
-					page := findPageNumber(content.Pages, t.Span.Offset)
-					parts = append(parts, part.NewTablePart(fileID, page, t.Span.Offset, tableToText(t), tableToMap(t)))
+		ctx := &traverseCtx{
+			ContentIdx:   contentIdx,
+			Content:      content,
+			Visited:      make(map[string]bool),
+			CaptionElems: buildCaptionSet(content),
+			FigCh:        figCh,
+			FileID:       fileID,
+			OpID:         result.ID,
+		}
+		parts = append(parts, ctx.traverse(0)...)
+	}
 
-				case strings.HasPrefix(elem, "/figures/"):
-					idx := parseIndex(elem)
-					if idx < 0 || idx >= len(content.Figures) {
-						continue
-					}
-					f := content.Figures[idx]
-					page := findPageNumber(content.Pages, f.Span.Offset)
+	return parts
+}
 
-					var textParts []string
-					for _, el := range f.Elements {
-						if strings.HasPrefix(el, "/paragraphs/") {
-							pIdx := parseIndex(el)
-							if pIdx >= 0 && pIdx < len(content.Paragraphs) {
-								textParts = append(textParts, content.Paragraphs[pIdx].Content)
-							}
-						}
-					}
-					text := strings.Join(textParts, " ")
-					s3Key := fmt.Sprintf("figures/%s/%s.png", fileID, f.ID)
+type traverseCtx struct {
+	ContentIdx   int
+	Content      AnalysisContent
+	Visited      map[string]bool
+	CaptionElems map[string]bool
+	FigCh        chan<- FigureRequest
+	FileID       string
+	OpID         string
+	headingStack []string
+}
 
-					parts = append(parts, part.NewImagePart(fileID, page, f.Span.Offset, text, part.Image{Key: s3Key}))
-					figCh <- FigureRequest{
-						OpID:       result.ID,
-						ContentIdx: contentIdx,
-						FigureID:   f.ID,
-						S3Key:      s3Key,
-					}
-				}
+func (ctx *traverseCtx) traverse(sectionIdx int) []part.Part {
+	var parts []part.Part
+
+	depthBefore := len(ctx.headingStack)
+
+	for _, elem := range ctx.Content.Sections[sectionIdx].Elements {
+		if ctx.Visited[elem] {
+			continue
+		}
+		ctx.Visited[elem] = true
+
+		switch {
+		case strings.HasPrefix(elem, "/sections/"):
+			idx := parseIndex(elem)
+			if idx < 0 || idx >= len(ctx.Content.Sections) {
+				continue
+			}
+			parts = append(parts, ctx.traverse(idx)...)
+
+		case strings.HasPrefix(elem, "/paragraphs/"):
+			if ctx.CaptionElems[elem] {
+				continue
+			}
+			idx := parseIndex(elem)
+			if idx < 0 || idx >= len(ctx.Content.Paragraphs) {
+				continue
+			}
+			p := ctx.Content.Paragraphs[idx]
+			switch part.Role(p.Role) {
+			case part.RolePageHeader, part.RolePageFooter, part.RolePageNumber:
+				continue
+			}
+			role := part.Role(p.Role)
+			if role == "" {
+				role = part.RoleContent
+			}
+
+			if role == part.RoleSectionHeading {
+				ctx.headingStack = append(ctx.headingStack, p.Content)
+			}
+
+			page := findPageNumber(ctx.Content.Pages, p.Span.Offset)
+			pt := part.NewTextPart(ctx.FileID, role, page, p.Span.Offset, p.Content, slices.Clone(ctx.headingStack))
+			parts = append(parts, pt)
+
+		case strings.HasPrefix(elem, "/tables/"):
+			idx := parseIndex(elem)
+			if idx < 0 || idx >= len(ctx.Content.Tables) {
+				continue
+			}
+			t := ctx.Content.Tables[idx]
+			page := findPageNumber(ctx.Content.Pages, t.Span.Offset)
+			pt := part.NewTablePart(ctx.FileID, page, t.Span.Offset, tableToText(t), tableToMap(t), slices.Clone(ctx.headingStack))
+			parts = append(parts, pt)
+
+		case strings.HasPrefix(elem, "/figures/"):
+			idx := parseIndex(elem)
+			if idx < 0 || idx >= len(ctx.Content.Figures) {
+				continue
+			}
+			f := ctx.Content.Figures[idx]
+			page := findPageNumber(ctx.Content.Pages, f.Span.Offset)
+			text := ""
+			if f.Caption != nil {
+				text = f.Caption.Content
+			}
+			s3Key := fmt.Sprintf("figures/%s/%s.png", ctx.FileID, f.ID)
+			pt := part.NewImagePart(ctx.FileID, page, f.Span.Offset, text, s3Key, slices.Clone(ctx.headingStack))
+			parts = append(parts, pt)
+			ctx.FigCh <- FigureRequest{OpID: ctx.OpID, ContentIdx: ctx.ContentIdx, FigureID: f.ID, S3Key: s3Key}
+		}
+	}
+
+	ctx.headingStack = ctx.headingStack[:depthBefore]
+
+	return parts
+}
+
+func buildCaptionSet(content AnalysisContent) map[string]bool {
+	set := make(map[string]bool)
+	for _, f := range content.Figures {
+		if f.Caption != nil {
+			for _, el := range f.Caption.Elements {
+				set[el] = true
 			}
 		}
 	}
-	return parts
+	for _, t := range content.Tables {
+		if t.Caption != nil {
+			for _, el := range t.Caption.Elements {
+				set[el] = true
+			}
+		}
+	}
+	return set
 }
 
 func findPageNumber(pages []Page, offset int) int {
@@ -95,18 +168,92 @@ func parseIndex(elem string) int {
 }
 
 func tableToText(t Table) string {
-	var sb strings.Builder
-	for _, cell := range t.Cells {
-		sb.WriteString(cell.Content)
-		sb.WriteString(" ")
+	if len(t.Cells) == 0 {
+		return ""
 	}
-	return strings.TrimSpace(sb.String())
+
+	maxRow, maxCol := 0, 0
+	for _, cell := range t.Cells {
+		if cell.RowIndex > maxRow {
+			maxRow = cell.RowIndex
+		}
+		if cell.ColumnIndex > maxCol {
+			maxCol = cell.ColumnIndex
+		}
+	}
+
+	grid := make([][]string, maxRow+1)
+	for i := range grid {
+		grid[i] = make([]string, maxCol+1)
+	}
+	for _, cell := range t.Cells {
+		grid[cell.RowIndex][cell.ColumnIndex] = cell.Content
+	}
+
+	colWidths := make([]int, maxCol+1)
+	for _, row := range grid {
+		for j, cell := range row {
+			if len([]rune(cell)) > colWidths[j] {
+				colWidths[j] = len([]rune(cell))
+			}
+		}
+	}
+
+	var sb strings.Builder
+	for i, row := range grid {
+		sb.WriteString("| ")
+		for j, cell := range row {
+			padding := colWidths[j] - len([]rune(cell))
+			sb.WriteString(cell)
+			sb.WriteString(strings.Repeat(" ", padding))
+			sb.WriteString(" | ")
+		}
+		sb.WriteString("\n")
+
+		if i == 0 {
+			sb.WriteString("|")
+			for _, w := range colWidths {
+				sb.WriteString(strings.Repeat("-", w+2))
+				sb.WriteString("|")
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	return sb.String()
 }
 
 func tableToMap(t Table) map[string]any {
+	headers := make(map[int]string)
+	for _, cell := range t.Cells {
+		if cell.RowIndex == 0 {
+			headers[cell.ColumnIndex] = cell.Content
+		}
+	}
+
+	rowMap := make(map[int]map[string]any)
+	for _, cell := range t.Cells {
+		if cell.RowIndex == 0 {
+			continue
+		}
+		if rowMap[cell.RowIndex] == nil {
+			rowMap[cell.RowIndex] = make(map[string]any)
+		}
+		header := headers[cell.ColumnIndex]
+		if header == "" {
+			header = fmt.Sprintf("col_%d", cell.ColumnIndex)
+		}
+		rowMap[cell.RowIndex][header] = cell.Content
+	}
+
+	rows := make([]map[string]any, 0, len(rowMap))
+	for i := 1; i <= t.RowCount; i++ {
+		if row, ok := rowMap[i]; ok {
+			rows = append(rows, row)
+		}
+	}
+
 	return map[string]any{
-		"rowCount":    t.RowCount,
-		"columnCount": t.ColumnCount,
-		"cells":       t.Cells,
+		"table": rows,
 	}
 }
