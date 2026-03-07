@@ -3,18 +3,34 @@ package job
 import "time"
 
 type Job struct {
-	ID        string `json:"id"`
-	Key       string `json:"key"`
-	File      *File  `json:"file"`
-	CreatedAt int64  `json:"created_at"`
+	id        string
+	key       string
+	file      *File
+	createdAt int64
+}
+
+func (j Job) ID() string {
+	return j.id
+}
+
+func (j Job) Key() string {
+	return j.key
+}
+
+func (j Job) File() *File {
+	return j.file
+}
+
+func (j Job) CreatedAt() int64 {
+	return j.createdAt
 }
 
 func NewJob(id, key string, file File) Job {
 	createdAt := time.Now().Unix()
 	return Job{
-		ID:        id,
-		Key:       key,
-		File:      &file,
-		CreatedAt: createdAt,
+		id:        id,
+		key:       key,
+		file:      &file,
+		createdAt: createdAt,
 	}
 }

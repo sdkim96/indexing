@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/sdkim96/indexing/job"
@@ -11,18 +12,27 @@ import (
 
 const MaxPollInterval = 60 * time.Second
 
-type AnalysisCompleted struct {
-	Parts []part.Part `json:"parts"`
-}
-
 type Analysis struct {
-	job          job.Job
-	client       Client
+	job job.Job
+	Client
 	pollCallback func(status OperationStatus)
 	pollInterval time.Duration
 }
 
+func NewAnalysis(j job.Job, endpoint, apiKey string) *Analysis {
+	return &Analysis{
+		job:    j,
+		Client: Client{endpoint: endpoint, apiKey: apiKey, httpClient: http.DefaultClient},
+	}
+}
+
 type AnalysisOption func(*Analysis)
+
+func WithHTTPClient(c *http.Client) AnalysisOption {
+	return func(a *Analysis) {
+		a.httpClient = c
+	}
+}
 
 func WithPollCallback(callback func(status OperationStatus)) AnalysisOption {
 	return func(a *Analysis) {
@@ -36,16 +46,21 @@ func WithPollInterval(interval time.Duration) AnalysisOption {
 	}
 }
 
+type AnalysisCompleted struct {
+	Parts []part.Part `json:"parts"`
+}
+
 func (a *Analysis) Do(
 	ctx context.Context,
-	opt ...AnalysisOption,
+	figCh chan<- FigureRequest,
+	opts ...AnalysisOption,
 ) (AnalysisCompleted, error) {
 
-	for _, o := range opt {
-		o(a)
+	for _, opt := range opts {
+		opt(a)
 	}
 
-	opLocation, err := a.client.start(ctx, a.job)
+	opLocation, err := a.Start(ctx, a.job.File())
 	if err != nil {
 		return AnalysisCompleted{}, err
 	}
@@ -55,7 +70,7 @@ func (a *Analysis) Do(
 	}
 
 	for {
-		result, err := a.client.getResult(ctx, opLocation)
+		result, err := a.GetResult(ctx, opLocation)
 		if err != nil {
 			return AnalysisCompleted{}, err
 		}
@@ -76,7 +91,7 @@ func (a *Analysis) Do(
 			}
 
 		case StatusSucceeded:
-			return AnalysisCompleted{Parts: convertToParts(result.Result)}, nil
+			return AnalysisCompleted{Parts: ConvertToParts(a.job.File().ID, result, figCh)}, nil
 		case StatusFailed, StatusCanceled:
 			return AnalysisCompleted{}, fmt.Errorf("analysis failed or canceled")
 		}

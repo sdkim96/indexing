@@ -7,6 +7,7 @@ import (
 )
 
 type File struct {
+	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Bytes    []byte `json:"bytes"`
 	MimeType string `json:"mime_type"`
