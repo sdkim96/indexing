@@ -1,13 +1,14 @@
 package cache
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 )
 
 type Cache interface {
-	Set(key string, value any) error
-	Get(key string) (any, error)
+	Get(ctx context.Context, key string) ([]byte, bool, error)
+	Set(ctx context.Context, key string, value []byte) error
 }
 
 type Cacheable interface {

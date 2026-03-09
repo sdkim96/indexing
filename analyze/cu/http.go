@@ -1,4 +1,4 @@
-package analysis
+package cu
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/sdkim96/indexing/job"
+	"github.com/sdkim96/indexing/input"
 )
 
 const APIHeaderKey = "Ocp-Apim-Subscription-Key"
@@ -23,27 +23,29 @@ func figureURL(endpoint, opID string, contentIdx int, figureID string) string {
 	return fmt.Sprintf(endpoint+GetFigureEndpointPath, opID, contentIdx, figureID)
 }
 
-type Client struct {
-	httpClient *http.Client
-	endpoint   string
-	apiKey     string
+type HTTPClient struct {
+	client   *http.Client
+	endpoint string
+	apiKey   string
 }
 
-func NewClient(endpoint, apiKey string, client *http.Client) *Client {
+func NewHTTPClient(endpoint, apiKey string, client *http.Client) *HTTPClient {
 
-	return &Client{
-		httpClient: client,
-		endpoint:   endpoint,
-		apiKey:     apiKey,
+	return &HTTPClient{
+		client:   client,
+		endpoint: endpoint,
+		apiKey:   apiKey,
 	}
 }
 
-func (c *Client) Start(ctx context.Context, f *job.File) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", startURL(c.endpoint), bytes.NewReader(f.Bytes))
+func (c *HTTPClient) Start(ctx context.Context, inp input.Input) (string, error) {
+
+	data, err := io.ReadAll(inp)
+	req, err := http.NewRequestWithContext(ctx, "POST", startURL(c.endpoint), bytes.NewReader(data))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", f.MimeType)
+	req.Header.Set("Content-Type", inp.MimeType())
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
@@ -64,7 +66,7 @@ func (c *Client) Start(ctx context.Context, f *job.File) (string, error) {
 	return opLocation, nil
 }
 
-func (c *Client) GetResult(ctx context.Context, opLocation string) (Operation, error) {
+func (c *HTTPClient) GetResult(ctx context.Context, opLocation string) (Operation, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", opLocation, nil)
 	if err != nil {
 		return Operation{}, err
@@ -94,7 +96,7 @@ func (c *Client) GetResult(ctx context.Context, opLocation string) (Operation, e
 	return op, nil
 }
 
-func (c *Client) GetFigure(
+func (c *HTTPClient) GetFigure(
 	ctx context.Context,
 	fig FigureRequest,
 ) ([]byte, string, error) {
@@ -122,7 +124,7 @@ func (c *Client) GetFigure(
 	return body, contentType, nil
 }
 
-func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, error) {
+func (c *HTTPClient) do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	req.Header.Set(APIHeaderKey, c.apiKey)
-	return c.httpClient.Do(req.WithContext(ctx))
+	return c.client.Do(req.WithContext(ctx))
 }

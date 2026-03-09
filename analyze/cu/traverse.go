@@ -1,4 +1,4 @@
-package analysis
+package cu
 
 import (
 	"fmt"
@@ -6,10 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/sdkim96/indexing/part"
 )
 
-func ConvertToParts(fileID string, result Operation, figCh chan<- FigureRequest) []part.Part {
+func ConvertToParts(result Operation, figCh chan<- FigureRequest) []part.Part {
 	if result.Result == nil {
 		return nil
 	}
@@ -27,7 +28,7 @@ func ConvertToParts(fileID string, result Operation, figCh chan<- FigureRequest)
 			Visited:      make(map[string]bool),
 			CaptionElems: buildCaptionSet(content),
 			FigCh:        figCh,
-			FileID:       fileID,
+			FileID:       uuid.New().String(),
 			OpID:         result.ID,
 		}
 		parts = append(parts, ctx.traverse(0)...)
@@ -75,21 +76,21 @@ func (ctx *traverseCtx) traverse(sectionIdx int) []part.Part {
 				continue
 			}
 			p := ctx.Content.Paragraphs[idx]
-			switch part.Role(p.Role) {
-			case part.RolePageHeader, part.RolePageFooter, part.RolePageNumber:
+			switch Role(p.Role) {
+			case RolePageHeader, RolePageFooter, RolePageNumber:
 				continue
 			}
-			role := part.Role(p.Role)
+			role := Role(p.Role)
 			if role == "" {
-				role = part.RoleContent
+				role = RoleContent
 			}
 
-			if role == part.RoleSectionHeading {
+			if role == RoleSectionHeading {
 				ctx.headingStack = append(ctx.headingStack, p.Content)
 			}
 
 			page := findPageNumber(ctx.Content.Pages, p.Span.Offset)
-			pt := part.NewTextPart(ctx.FileID, role, page, p.Span.Offset, p.Content, slices.Clone(ctx.headingStack))
+			pt := NewTextPart(ctx.FileID, role, page, p.Span.Offset, p.Content, slices.Clone(ctx.headingStack))
 			parts = append(parts, pt)
 
 		case strings.HasPrefix(elem, "/tables/"):
@@ -99,7 +100,7 @@ func (ctx *traverseCtx) traverse(sectionIdx int) []part.Part {
 			}
 			t := ctx.Content.Tables[idx]
 			page := findPageNumber(ctx.Content.Pages, t.Span.Offset)
-			pt := part.NewTablePart(ctx.FileID, page, t.Span.Offset, tableToText(t), tableToMap(t), slices.Clone(ctx.headingStack))
+			pt := NewTablePart(ctx.FileID, page, t.Span.Offset, tableToText(t), tableToMap(t), slices.Clone(ctx.headingStack))
 			parts = append(parts, pt)
 
 		case strings.HasPrefix(elem, "/figures/"):
@@ -114,7 +115,7 @@ func (ctx *traverseCtx) traverse(sectionIdx int) []part.Part {
 				text = f.Caption.Content
 			}
 			s3Key := fmt.Sprintf("figures/%s/%s.png", ctx.FileID, f.ID)
-			pt := part.NewImagePart(ctx.FileID, page, f.Span.Offset, text, s3Key, slices.Clone(ctx.headingStack))
+			pt := NewImagePart(ctx.FileID, page, f.Span.Offset, text, s3Key, slices.Clone(ctx.headingStack))
 			parts = append(parts, pt)
 			ctx.FigCh <- FigureRequest{OpID: ctx.OpID, ContentIdx: ctx.ContentIdx, FigureID: f.ID, S3Key: s3Key}
 		}
