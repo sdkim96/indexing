@@ -2,15 +2,18 @@ package part
 
 import (
 	"context"
+
+	"github.com/sdkim96/indexing/internal/mime"
+	"github.com/sdkim96/indexing/internal/uri"
 )
 
 type Part interface {
-	MimeType() string
+	MimeType() mime.Type
 	Text() string
-	Raw() any
+	Raw() []byte
 }
 
 // PartWriter persists Parts.
 type PartWriter interface {
-	Write(ctx context.Context, sourceID string, parts []Part) error
+	Write(ctx context.Context, URI uri.URI, parts []Part) error
 }

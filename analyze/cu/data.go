@@ -1,5 +1,7 @@
 package cu
 
+import "github.com/sdkim96/indexing/internal/uri"
+
 type DataType string
 
 const (
@@ -44,5 +46,5 @@ func (t TableData) GetText() string   { return t.Text }
 func (t TableData) Raw() any          { return t.Table }
 
 type Image struct {
-	Key string `json:"key"`
+	URI uri.URI `json:"uri,omitempty"`
 }

@@ -3,6 +3,7 @@ package runner
 import (
 	"time"
 
+	"github.com/sdkim96/indexing/internal/uri"
 	"github.com/sdkim96/indexing/part"
 	"github.com/sdkim96/indexing/search"
 )
@@ -10,7 +11,8 @@ import (
 // IndexingContext carries data across pipeline stages.
 type IndexingContext struct {
 	// 실행 메타
-	SourceID     string
+	InputKey     uri.URI
+	PartWriteKey uri.URI
 	StartedAt    time.Time
 	AttemptCount int    // 재시도 횟수 (로깅용)
 	TraceID      string // 분산 추적용

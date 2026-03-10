@@ -1,9 +1,12 @@
 package cu
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/sdkim96/indexing/cache"
+	"github.com/sdkim96/indexing/internal/mime"
+	"github.com/sdkim96/indexing/internal/uri"
 	"github.com/sdkim96/indexing/part"
 )
 
@@ -25,68 +28,142 @@ const (
 var _ part.Part = (*CUPart)(nil)
 
 type CUPart struct {
-	ID              string   `json:"id"`
-	FileID          string   `json:"source_id"`
-	Role            Role     `json:"role"`
-	Data            Data     `json:"data"`
-	Page            int      `json:"page"`
-	Offset          int      `json:"offset"`
-	CreatedAt       int64    `json:"created_at"`
-	SectionHeadings []string `json:"section_headings,omitempty"`
+	role            Role
+	data            Data
+	page            int
+	offset          int
+	createdAt       int64
+	sectionHeadings []string
+	mimeType        mime.Type
 }
 
-func (p *CUPart) MimeType() string { return mimeTypeFromRole(p.Role) }
-func (p *CUPart) Text() string     { return p.Data.GetText() }
-func (p *CUPart) Raw() any         { return p.Data.Raw() }
+func (p *CUPart) MimeType() mime.Type { return p.mimeType }
+func (p *CUPart) Text() string        { return p.data.GetText() }
+func (p *CUPart) Raw() []byte {
+	b, _ := json.Marshal(struct {
+		Role            Role     `json:"role"`
+		Page            int      `json:"page"`
+		Offset          int      `json:"offset"`
+		CreatedAt       int64    `json:"created_at"`
+		SectionHeadings []string `json:"section_headings,omitempty"`
+		Data            any      `json:"data"`
+	}{
+		Role:            p.role,
+		Page:            p.page,
+		Offset:          p.offset,
+		CreatedAt:       p.createdAt,
+		SectionHeadings: p.sectionHeadings,
+		Data:            p.data.Raw(),
+	})
+	return b
+}
 
-func mimeTypeFromRole(role Role) string {
-	switch role {
-	case RoleSectionHeading, RoleTitle:
-		return "text/heading"
-	case RoleImage:
-		return "image/figure"
-	case RoleTable:
-		return "table/document"
+func (p *CUPart) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Role            Role      `json:"role"`
+		MimeType        mime.Type `json:"mime_type"`
+		Page            int       `json:"page"`
+		Offset          int       `json:"offset"`
+		CreatedAt       int64     `json:"created_at"`
+		SectionHeadings []string  `json:"section_headings,omitempty"`
+		Data            Data      `json:"data"`
+	}{
+		Role:            p.role,
+		MimeType:        p.mimeType,
+		Page:            p.page,
+		Offset:          p.offset,
+		CreatedAt:       p.createdAt,
+		SectionHeadings: p.sectionHeadings,
+		Data:            p.data,
+	})
+}
+
+func (p *CUPart) UnmarshalJSON(data []byte) error {
+	var v struct {
+		Role            Role            `json:"role"`
+		MimeType        mime.Type       `json:"mime_type"`
+		Page            int             `json:"page"`
+		Offset          int             `json:"offset"`
+		CreatedAt       int64           `json:"created_at"`
+		SectionHeadings []string        `json:"section_headings,omitempty"`
+		Data            json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+
+	p.role = v.Role
+	p.mimeType = v.MimeType
+	p.page = v.Page
+	p.offset = v.Offset
+	p.createdAt = v.CreatedAt
+	p.sectionHeadings = v.SectionHeadings
+
+	var header struct {
+		Type DataType `json:"type"`
+	}
+	if err := json.Unmarshal(v.Data, &header); err != nil {
+		return err
+	}
+
+	switch header.Type {
+	case TextDataType:
+		var d TextData
+		if err := json.Unmarshal(v.Data, &d); err != nil {
+			return err
+		}
+		p.data = d
+	case ImageDataType:
+		var d ImageData
+		if err := json.Unmarshal(v.Data, &d); err != nil {
+			return err
+		}
+		p.data = d
+	case TableDataType:
+		var d TableData
+		if err := json.Unmarshal(v.Data, &d); err != nil {
+			return err
+		}
+		p.data = d
 	default:
-		return "text/paragraph"
+		return fmt.Errorf("unknown data type: %q", header.Type)
+	}
+
+	return nil
+}
+
+func NewTextPart(role Role, page, offset int, text string, headings []string) part.Part {
+	return &CUPart{
+		role:            role,
+		data:            TextData{Type: TextDataType, Text: text},
+		page:            page,
+		offset:          offset,
+		createdAt:       time.Now().Unix(),
+		sectionHeadings: headings,
+		mimeType:        mime.MimeTxt,
 	}
 }
 
-func NewTextPart(fileID string, role Role, page, offset int, text string, headings []string) part.Part {
+func NewImageURLPart(page, offset int, caption string, uri uri.URI, mimeType mime.Type, headings []string) part.Part {
 	return &CUPart{
-		ID:              "part-text-" + cache.Sha256([]byte(text)),
-		FileID:          fileID,
-		Role:            role,
-		Data:            TextData{Type: TextDataType, Text: text},
-		Page:            page,
-		Offset:          offset,
-		CreatedAt:       time.Now().Unix(),
-		SectionHeadings: headings,
+		role:            RoleImage,
+		data:            ImageData{Type: ImageDataType, Text: caption, Image: Image{URI: uri}},
+		page:            page,
+		offset:          offset,
+		createdAt:       time.Now().Unix(),
+		sectionHeadings: headings,
+		mimeType:        mimeType,
 	}
 }
 
-func NewImagePart(fileID string, page, offset int, caption, key string, headings []string) part.Part {
+func NewTablePart(page, offset int, text string, table map[string]any, headings []string) part.Part {
 	return &CUPart{
-		ID:              "part-image-" + cache.Sha256([]byte(caption), []byte(key)),
-		FileID:          fileID,
-		Role:            RoleImage,
-		Data:            ImageData{Type: ImageDataType, Text: caption, Image: Image{Key: key}},
-		Page:            page,
-		Offset:          offset,
-		CreatedAt:       time.Now().Unix(),
-		SectionHeadings: headings,
-	}
-}
-
-func NewTablePart(fileID string, page, offset int, text string, table map[string]any, headings []string) part.Part {
-	return &CUPart{
-		ID:              "part-table-" + cache.Sha256([]byte(text)),
-		FileID:          fileID,
-		Role:            RoleTable,
-		Data:            TableData{Type: TableDataType, Text: text, Table: table},
-		Page:            page,
-		Offset:          offset,
-		CreatedAt:       time.Now().Unix(),
-		SectionHeadings: headings,
+		role:            RoleTable,
+		data:            TableData{Type: TableDataType, Text: text, Table: table},
+		page:            page,
+		offset:          offset,
+		createdAt:       time.Now().Unix(),
+		sectionHeadings: headings,
+		mimeType:        mime.MimeJSON,
 	}
 }

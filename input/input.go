@@ -1,9 +1,13 @@
 package input
 
-import "io"
+import (
+	"io"
+
+	"github.com/sdkim96/indexing/internal/mime"
+)
 
 type Input interface {
 	io.ReadCloser
-	MimeType() string
+	MimeType() mime.Type
 	Meta() map[string]any
 }

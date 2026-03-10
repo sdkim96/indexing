@@ -41,7 +41,7 @@ func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event
 
 		// 0단계: sourceID → Input 변환
 		start := time.Now()
-		input, err := r.provider.Provide(ctx, ictx.SourceID)
+		input, err := r.provider.Provide(ctx, ictx.InputKey)
 		if !yield(Event{"provide", ictx, time.Since(start)}, err) {
 			return
 		}
@@ -57,7 +57,7 @@ func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event
 
 		// 2단계: 저장한다
 		start = time.Now()
-		err = r.partWriter.Write(ctx, ictx.SourceID, ictx.Parts)
+		err = r.partWriter.Write(ctx, ictx.PartWriteKey, ictx.Parts)
 		if !yield(Event{"part", ictx, time.Since(start)}, err) {
 			return
 		}

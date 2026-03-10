@@ -1,81 +1,139 @@
 package cu
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/sdkim96/indexing/internal/mime"
+	"github.com/sdkim96/indexing/internal/storage"
+	"github.com/sdkim96/indexing/internal/uri"
 	"github.com/sdkim96/indexing/part"
 )
 
-func ConvertToParts(result Operation, figCh chan<- FigureRequest) []part.Part {
+type figureRequest struct {
+	opID       string
+	contentIdx int
+	figureID   string
+	fileID     string
+	page       int
+	offset     int
+	caption    string
+	headings   []string
+}
+
+func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, storage storage.Client) ([]part.Part, error) {
 	if result.Result == nil {
-		return nil
+		return nil, fmt.Errorf("operation %q result is nil: check if the operation completed successfully", result.ID)
 	}
 
 	var parts []part.Part
+	var figureRequests []figureRequest
 
 	for contentIdx, content := range result.Result.Contents {
 		if len(content.Sections) == 0 {
 			continue
 		}
 
-		ctx := &traverseCtx{
-			ContentIdx:   contentIdx,
-			Content:      content,
-			Visited:      make(map[string]bool),
-			CaptionElems: buildCaptionSet(content),
-			FigCh:        figCh,
-			FileID:       uuid.New().String(),
-			OpID:         result.ID,
+		tCtx := &traverseCtx{
+			contentIdx:   contentIdx,
+			content:      content,
+			visited:      make(map[string]bool),
+			captionElems: buildCaptionSet(content),
+			fileID:       uuid.New().String(),
+			opID:         result.ID,
 		}
-		parts = append(parts, ctx.traverse(0)...)
+		p, figs := tCtx.traverse(0)
+		parts = append(parts, p...)
+		figureRequests = append(figureRequests, figs...)
 	}
 
-	return parts
+	for _, req := range figureRequests {
+		uri, mimeType, err := uploadFigure(ctx, req, http, storage)
+		if err != nil {
+			pt := NewTextPart(RoleImage, req.page, req.offset, req.caption, req.headings)
+			parts = append(parts, pt)
+			continue
+		}
+		pt := NewImageURLPart(req.page, req.offset, req.caption, uri, mimeType, req.headings)
+		parts = append(parts, pt)
+	}
+
+	return parts, nil
+}
+
+func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, storage storage.Client) (uri uri.URI, mimeType mime.Type, err error) {
+	data, contentType, err := http.GetFigure(ctx, FigureRequest{
+		OpID:       req.opID,
+		ContentIdx: req.contentIdx,
+		FigureID:   req.figureID,
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	ext := mime.GuessExtension(contentType)
+	storageKey := fmt.Sprintf("figures/%s/%s%s", req.fileID, req.figureID, ext)
+
+	w, uri, err := storage.Create(ctx, storageKey, contentType)
+	if err != nil {
+		return "", "", err
+	}
+	defer w.Close()
+
+	if _, err = io.Copy(w, bytes.NewReader(data)); err != nil {
+		return "", "", err
+	}
+
+	return uri, contentType, nil
 }
 
 type traverseCtx struct {
-	ContentIdx   int
-	Content      AnalysisContent
-	Visited      map[string]bool
-	CaptionElems map[string]bool
-	FigCh        chan<- FigureRequest
-	FileID       string
-	OpID         string
+	contentIdx   int
+	content      AnalysisContent
+	visited      map[string]bool
+	captionElems map[string]bool
+	fileID       string
+	opID         string
 	headingStack []string
 }
 
-func (ctx *traverseCtx) traverse(sectionIdx int) []part.Part {
+func (ctx *traverseCtx) traverse(sectionIdx int) ([]part.Part, []figureRequest) {
 	var parts []part.Part
+	var figs []figureRequest
 
 	depthBefore := len(ctx.headingStack)
 
-	for _, elem := range ctx.Content.Sections[sectionIdx].Elements {
-		if ctx.Visited[elem] {
+	for _, elem := range ctx.content.Sections[sectionIdx].Elements {
+		if ctx.visited[elem] {
 			continue
 		}
-		ctx.Visited[elem] = true
+		ctx.visited[elem] = true
 
 		switch {
 		case strings.HasPrefix(elem, "/sections/"):
 			idx := parseIndex(elem)
-			if idx < 0 || idx >= len(ctx.Content.Sections) {
+			if idx < 0 || idx >= len(ctx.content.Sections) {
 				continue
 			}
-			parts = append(parts, ctx.traverse(idx)...)
+			p, f := ctx.traverse(idx)
+			parts = append(parts, p...)
+			figs = append(figs, f...)
 
 		case strings.HasPrefix(elem, "/paragraphs/"):
-			if ctx.CaptionElems[elem] {
+			if ctx.captionElems[elem] {
 				continue
 			}
 			idx := parseIndex(elem)
-			if idx < 0 || idx >= len(ctx.Content.Paragraphs) {
+			if idx < 0 || idx >= len(ctx.content.Paragraphs) {
 				continue
 			}
-			p := ctx.Content.Paragraphs[idx]
+			p := ctx.content.Paragraphs[idx]
 			switch Role(p.Role) {
 			case RolePageHeader, RolePageFooter, RolePageNumber:
 				continue
@@ -84,46 +142,50 @@ func (ctx *traverseCtx) traverse(sectionIdx int) []part.Part {
 			if role == "" {
 				role = RoleContent
 			}
-
 			if role == RoleSectionHeading {
 				ctx.headingStack = append(ctx.headingStack, p.Content)
 			}
-
-			page := findPageNumber(ctx.Content.Pages, p.Span.Offset)
-			pt := NewTextPart(ctx.FileID, role, page, p.Span.Offset, p.Content, slices.Clone(ctx.headingStack))
+			page := findPageNumber(ctx.content.Pages, p.Span.Offset)
+			pt := NewTextPart(role, page, p.Span.Offset, p.Content, slices.Clone(ctx.headingStack))
 			parts = append(parts, pt)
 
 		case strings.HasPrefix(elem, "/tables/"):
 			idx := parseIndex(elem)
-			if idx < 0 || idx >= len(ctx.Content.Tables) {
+			if idx < 0 || idx >= len(ctx.content.Tables) {
 				continue
 			}
-			t := ctx.Content.Tables[idx]
-			page := findPageNumber(ctx.Content.Pages, t.Span.Offset)
-			pt := NewTablePart(ctx.FileID, page, t.Span.Offset, tableToText(t), tableToMap(t), slices.Clone(ctx.headingStack))
+			t := ctx.content.Tables[idx]
+			page := findPageNumber(ctx.content.Pages, t.Span.Offset)
+			pt := NewTablePart(page, t.Span.Offset, tableToText(t), tableToMap(t), slices.Clone(ctx.headingStack))
 			parts = append(parts, pt)
 
 		case strings.HasPrefix(elem, "/figures/"):
 			idx := parseIndex(elem)
-			if idx < 0 || idx >= len(ctx.Content.Figures) {
+			if idx < 0 || idx >= len(ctx.content.Figures) {
 				continue
 			}
-			f := ctx.Content.Figures[idx]
-			page := findPageNumber(ctx.Content.Pages, f.Span.Offset)
-			text := ""
+			f := ctx.content.Figures[idx]
+			page := findPageNumber(ctx.content.Pages, f.Span.Offset)
+			caption := ""
 			if f.Caption != nil {
-				text = f.Caption.Content
+				caption = f.Caption.Content
 			}
-			s3Key := fmt.Sprintf("figures/%s/%s.png", ctx.FileID, f.ID)
-			pt := NewImagePart(ctx.FileID, page, f.Span.Offset, text, s3Key, slices.Clone(ctx.headingStack))
-			parts = append(parts, pt)
-			ctx.FigCh <- FigureRequest{OpID: ctx.OpID, ContentIdx: ctx.ContentIdx, FigureID: f.ID, S3Key: s3Key}
+			figs = append(figs, figureRequest{
+				opID:       ctx.opID,
+				contentIdx: ctx.contentIdx,
+				figureID:   f.ID,
+				fileID:     ctx.fileID,
+				page:       page,
+				offset:     f.Span.Offset,
+				caption:    caption,
+				headings:   slices.Clone(ctx.headingStack),
+			})
 		}
 	}
 
 	ctx.headingStack = ctx.headingStack[:depthBefore]
 
-	return parts
+	return parts, figs
 }
 
 func buildCaptionSet(content AnalysisContent) map[string]bool {

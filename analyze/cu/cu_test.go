@@ -13,14 +13,18 @@ import (
 	"github.com/sdkim96/indexing/analyze/cu"
 	"github.com/sdkim96/indexing/input"
 	input_file "github.com/sdkim96/indexing/input/file"
-	"github.com/sdkim96/indexing/internal/blob"
+	"github.com/sdkim96/indexing/internal/storage"
 )
 
-func newTestCU(t *testing.T, url, apiKey string, opts ...cu.CUOptions) (*cu.CU, blob.Client) {
+func newTestCU(t *testing.T, url, apiKey string, opts ...cu.CUOptions) *cu.CU {
 	t.Helper()
-	blobClient := &blob.FileBlobClient{}
+	storageClient, err := storage.NewFileSystemClient("testdata/blob_storage")
+	if err != nil {
+		return nil
+	}
+
 	httpClient := cu.NewClient(url, apiKey, http.DefaultClient)
-	return cu.New(blobClient, httpClient, opts...), blobClient
+	return cu.New(storageClient, httpClient, opts...)
 }
 
 func newFileInput(t *testing.T, path string) input.Input {
@@ -29,11 +33,9 @@ func newFileInput(t *testing.T, path string) input.Input {
 	if err != nil {
 		t.Fatalf("failed to open file: %v", err)
 	}
-	inp := input_file.NewFileInput(f, "application/pdf", map[string]any{
+	return input_file.NewFileInput(f, "application/pdf", map[string]any{
 		"filename": path,
 	})
-
-	return inp
 }
 
 func TestAnalyze_Success(t *testing.T) {
@@ -69,7 +71,7 @@ func TestAnalyze_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	analyzer, _ := newTestCU(t, srv.URL, "test-api-key",
+	analyzer := newTestCU(t, srv.URL, "test-api-key",
 		cu.WithPollInterval(10*time.Millisecond),
 	)
 	inp := newFileInput(t, "testdata/test_with_image.pdf")
@@ -98,7 +100,7 @@ func TestAnalyze_Failed(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	analyzer, _ := newTestCU(t, srv.URL, "test-api-key",
+	analyzer := newTestCU(t, srv.URL, "test-api-key",
 		cu.WithPollInterval(10*time.Millisecond),
 	)
 	inp := input_file.NewFileInput(nopCloser{}, "application/pdf", nil)
@@ -126,7 +128,7 @@ func TestAnalyze_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	analyzer, _ := newTestCU(t, srv.URL, "test-api-key",
+	analyzer := newTestCU(t, srv.URL, "test-api-key",
 		cu.WithPollInterval(10*time.Millisecond),
 	)
 	inp := input_file.NewFileInput(nopCloser{}, "application/pdf", nil)
@@ -144,12 +146,12 @@ func TestAnalyze_Integration(t *testing.T) {
 		t.Skip("integration env not set")
 	}
 
-	analyzer, _ := newTestCU(t, endpoint, apiKey,
+	analyzer := newTestCU(t, endpoint, apiKey,
 		cu.WithPollCallback(func(status cu.OperationStatus) {
 			t.Logf("poll status: %s", status)
 		}),
 	)
-	inp := newFileInput(t, "testdata/cowboys.pdf")
+	inp := newFileInput(t, "testdata/report.pdf")
 	defer inp.Close()
 
 	parts, err := analyzer.Analyze(context.Background(), inp)
@@ -158,7 +160,7 @@ func TestAnalyze_Integration(t *testing.T) {
 	}
 
 	b, _ := json.MarshalIndent(parts, "", "  ")
-	os.WriteFile("testdata/result_cowboys.json", b, 0644)
+	os.WriteFile("testdata/result_report.json", b, 0644)
 	t.Logf("got %d parts", len(parts))
 }
 
@@ -185,21 +187,30 @@ func TestGetFigure(t *testing.T) {
 }
 
 func TestConvertToParts(t *testing.T) {
+	endpoint := os.Getenv("AZURE_AI_SERVICES_ENDPOINT")
+	apiKey := os.Getenv("AZURE_AI_FOUNDARY_API_KEY")
+	if endpoint == "" || apiKey == "" {
+		t.Skip("integration env not set")
+	}
+
 	var op cu.Operation
 	data, _ := os.ReadFile("testdata/cowboys.json")
 	json.Unmarshal(data, &op)
 
-	figCh := make(chan cu.FigureRequest, 5)
-	parts := cu.ConvertToParts(op, figCh)
-	close(figCh)
+	httpClient := cu.NewClient(endpoint, apiKey, http.DefaultClient)
+	storageClient, err := storage.NewFileSystemClient("testdata/blob_storage")
+	if err != nil {
+		t.Fatalf("failed to create storage client: %v", err)
+	}
+
+	parts, err := cu.ConvertToParts(context.Background(), op, httpClient, storageClient)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	b, _ := json.MarshalIndent(parts, "", "  ")
 	os.WriteFile("testdata/cowboys_converted_parts.json", b, 0644)
 	t.Logf("converted parts: %d", len(parts))
-
-	for sig := range figCh {
-		t.Logf("%v", sig)
-	}
 }
 
 // nopCloser는 빈 io.ReadCloser 테스트용

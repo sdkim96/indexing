@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/sdkim96/indexing/input"
+	"github.com/sdkim96/indexing/internal/mime"
 )
 
 const APIHeaderKey = "Ocp-Apim-Subscription-Key"
@@ -29,7 +30,7 @@ type HTTPClient struct {
 	apiKey   string
 }
 
-func NewHTTPClient(endpoint, apiKey string, client *http.Client) *HTTPClient {
+func NewClient(endpoint, apiKey string, client *http.Client) *HTTPClient {
 
 	return &HTTPClient{
 		client:   client,
@@ -45,7 +46,7 @@ func (c *HTTPClient) Start(ctx context.Context, inp input.Input) (string, error)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", inp.MimeType())
+	req.Header.Set("Content-Type", string(inp.MimeType()))
 
 	resp, err := c.do(ctx, req)
 	if err != nil {
@@ -99,7 +100,7 @@ func (c *HTTPClient) GetResult(ctx context.Context, opLocation string) (Operatio
 func (c *HTTPClient) GetFigure(
 	ctx context.Context,
 	fig FigureRequest,
-) ([]byte, string, error) {
+) ([]byte, mime.Type, error) {
 	url := figureURL(c.endpoint, fig.OpID, fig.ContentIdx, fig.FigureID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -121,7 +122,7 @@ func (c *HTTPClient) GetFigure(
 	}
 
 	contentType := resp.Header.Get("Content-Type")
-	return body, contentType, nil
+	return body, mime.Type(contentType), nil
 }
 
 func (c *HTTPClient) do(ctx context.Context, req *http.Request) (*http.Response, error) {
