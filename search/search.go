@@ -4,8 +4,6 @@ import "context"
 
 // SearchDoc represents a document to be indexed in a search engine.
 type SearchDoc interface {
-	SourceID() string
-	PartIDs() []string
 	Fields() map[string]any
 }
 
