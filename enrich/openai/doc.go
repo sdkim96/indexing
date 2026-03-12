@@ -10,10 +10,23 @@ type Keywords struct {
 	words []string
 }
 
+type Chunk struct {
+	Topic string `json:"topic" jsonschema:"description=The topic of the chunk."`
+	Idxs  []int  `json:"idxs" jsonschema:"description=The indexes of the chunk relevant in the original document."`
+}
+
+type Document struct {
+	Chunks []Chunk `json:"chunks" jsonschema:"description=The chunks of the document. Divided by the topic."`
+}
+
+type SummaryAndKeywords struct {
+	Summary  Summary
+	Keywords Keywords
+}
+
 type SearchDoc struct {
 	Embedding
-	Summary
-	Keywords
+	SummaryAndKeywords
 	Meta map[string]any
 }
 

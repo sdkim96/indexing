@@ -3,6 +3,7 @@ package cu
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sdkim96/indexing/internal/mime"
@@ -37,8 +38,25 @@ type CUPart struct {
 	mimeType        mime.Type
 }
 
-func (p *CUPart) MimeType() mime.Type { return p.mimeType }
-func (p *CUPart) Text() string        { return p.data.GetText() }
+func (p *CUPart) MimeType() mime.Type {
+	return p.mimeType
+}
+
+func (p *CUPart) Text() string {
+	var buf strings.Builder
+
+	buf.WriteString(fmt.Sprintf("## [%s] p.%d\n", p.role, p.page))
+
+	if len(p.sectionHeadings) > 0 {
+		buf.WriteString(fmt.Sprintf("> %s\n", strings.Join(p.sectionHeadings, " > ")))
+	}
+
+	buf.WriteString("\n")
+	buf.WriteString(p.data.GetText())
+
+	return buf.String()
+}
+
 func (p *CUPart) Raw() []byte {
 	b, _ := json.Marshal(struct {
 		Role            Role     `json:"role"`

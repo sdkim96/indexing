@@ -50,6 +50,13 @@ var mimeMapping = map[string]Type{
 	".zip":  MimeZIP,
 }
 
+func TextTypes() []Type {
+	return []Type{MimeTxt, MimeMd, MimeHTML, MimeCSV, MimeJSON, MimeXML}
+}
+func ImageTypes() []Type {
+	return []Type{MimePNG, MimeJPG, MimeGIF, MimeWebP}
+}
+
 func GuessMimeType(path string) Type {
 	for ext, mime := range mimeMapping {
 		if strings.HasSuffix(path, ext) {
