@@ -18,9 +18,11 @@ import (
 //   - the model to be used
 //   - the expected response format.
 type ResponseAPIParam struct {
-	system, user *responses.ResponseInputItemUnionParam
-	model        shared.ResponsesModel
-	format       *jsonschema.Schema
+	system, user    *responses.ResponseInputItemUnionParam
+	model           shared.ResponsesModel
+	format          *jsonschema.Schema
+	reasoningEffort shared.ReasoningEffort
+	temperature     float64
 }
 
 // NewResponseAPIParam creates a new ResponseAPIParam with the given options,
@@ -53,7 +55,7 @@ func (p *ResponseAPIParam) ToRequestParam() responses.ResponseNewParams {
 		respFormat.OfText = &responses.ResponseFormatTextParam{}
 	}
 
-	return responses.ResponseNewParams{
+	params := responses.ResponseNewParams{
 		Model: p.model,
 		Input: responses.ResponseNewParamsInputUnion{
 			OfInputItemList: []responses.ResponseInputItemUnionParam{
@@ -64,7 +66,15 @@ func (p *ResponseAPIParam) ToRequestParam() responses.ResponseNewParams {
 		Text: responses.ResponseTextConfigParam{
 			Format: respFormat,
 		},
+		Reasoning: responses.ReasoningParam{
+			Effort: p.reasoningEffort,
+		},
 	}
+	if p.temperature != 0 {
+		params.Temperature = openai.Float(p.temperature)
+	}
+
+	return params
 }
 
 type ResponseAPIParamOption func(*ResponseAPIParam)
@@ -136,5 +146,26 @@ func WithResponseFormat[T any]() ResponseAPIParamOption {
 		schema := r.Reflect(new(T))
 		p.format = schema.Definitions["T"]
 		p.format = schema
+	}
+}
+
+func WithReasoningEffort(level string) ResponseAPIParamOption {
+	return func(p *ResponseAPIParam) {
+		switch level {
+		case "low":
+			p.reasoningEffort = responses.ReasoningEffortLow
+		case "medium":
+			p.reasoningEffort = responses.ReasoningEffortMedium
+		case "high":
+			p.reasoningEffort = responses.ReasoningEffortHigh
+		default:
+			p.reasoningEffort = responses.ReasoningEffortMedium
+		}
+	}
+}
+
+func WithTemperature(temp float64) ResponseAPIParamOption {
+	return func(p *ResponseAPIParam) {
+		p.temperature = temp
 	}
 }

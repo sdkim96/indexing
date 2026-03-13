@@ -63,13 +63,14 @@ func Semantify(ctx context.Context, c openai.Client, parts []part.Part) (Documen
 		WithPartsAsUserMessage(parts),
 		WithModel("gpt-5-nano"),
 		WithResponseFormat[Document](),
+		WithReasoningEffort("medium"),
 	).ToRequestParam())
 	if err != nil {
 		return Document{}, err
 	}
 
 	var result Document
-	if err := json.Unmarshal([]byte(resp.RawJSON()), &result); err != nil {
+	if err := json.Unmarshal([]byte(resp.OutputText()), &result); err != nil {
 		return Document{}, err
 	}
 	return result, nil

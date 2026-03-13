@@ -16,7 +16,7 @@ import (
 // ── fixtures ──────────────────────────────────────────
 
 func newParts() []part.Part {
-	data, _ := os.ReadFile("testdata/result_cowboys.json")
+	data, _ := os.ReadFile("testdata/result_report.json")
 	var cuParts []cu.CUPart
 	_ = json.Unmarshal(data, &cuParts)
 
@@ -29,9 +29,9 @@ func newParts() []part.Part {
 
 func newSemanticDoc(t *testing.T) openaiEnrich.Document {
 	t.Helper()
-	data, err := os.ReadFile("testdata/semantify_result_cowboys.json")
+	data, err := os.ReadFile("testdata/semantify_report.json")
 	if err != nil {
-		t.Skip("testdata/semantify_result_cowboys.json not found: run TestSemantify first")
+		t.Skip("testdata/semantify_report.json not found: run TestSemantify first")
 	}
 
 	var oaiResp map[string]any
@@ -94,10 +94,10 @@ func TestSemantify(t *testing.T) {
 	// testdata/semantify_result_cowboys.json 저장
 	raw, _ := json.MarshalIndent(doc, "", "  ")
 	_ = os.MkdirAll("testdata", 0755)
-	if err := os.WriteFile("testdata/semantify_result_cowboys.json", raw, 0644); err != nil {
-		t.Logf("warn: failed to save semantify_result_cowboys.json: %v", err)
+	if err := os.WriteFile("testdata/semantify_report.json", raw, 0644); err != nil {
+		t.Logf("warn: failed to save semantify_report.json: %v", err)
 	} else {
-		t.Logf("saved testdata/semantify_result_cowboys.json")
+		t.Logf("saved testdata/semantify_report.json")
 	}
 
 	t.Logf("chunks=%d", len(doc.Chunks))

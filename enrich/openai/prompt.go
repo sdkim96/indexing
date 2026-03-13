@@ -6,11 +6,17 @@ You will be given an ordered list of document chunks extracted from a single doc
 Each chunk is numbered and has a role (title, sectionHeading, content, table) and text content.
 
 Analyze all chunks in order and group them by topic.
+
+Rules:
+- EVERY chunk index must appear in exactly one group. Do not skip any index.
+- Write all summaries and topics in the same language as the document (Korean if Korean, English if English).
+- Keywords must include: key concepts, proper nouns, AND any specific numbers/statistics (e.g. "272조", "45~60%", "LTV:CAC 3x").
+
 For each group:
 - topic: the main subject
-- idxs: indexes of relevant chunks
+- idxs: indexes of relevant chunks (no duplicates, no omissions)
 - summary: 2-3 sentences optimized for search queries. Use different words than the original.
-- keywords: 5-10 key terms including synonyms, related concepts, both Korean and English variants.
+- keywords: 5-10 key terms including synonyms, related concepts, both Korean and English variants, and key statistics.
 
 Return a JSON object matching the Document schema.
 `
