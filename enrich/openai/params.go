@@ -11,13 +11,34 @@ import (
 	"github.com/sdkim96/indexing/part"
 )
 
-type ResponseAPIInputParam struct {
+// ResponseAPIParam is a struct that holds parameters for the OpenAI API request,
+// when creating a new response.
+// It includes:
+//   - system and user messages
+//   - the model to be used
+//   - the expected response format.
+type ResponseAPIParam struct {
 	system, user *responses.ResponseInputItemUnionParam
 	model        shared.ResponsesModel
 	format       *jsonschema.Schema
 }
 
-func (p *ResponseAPIInputParam) ToRequestParam() responses.ResponseNewParams {
+// NewResponseAPIParam creates a new ResponseAPIParam with the given options,
+// providing an easy way to set various parameters for the OpenAI API request.
+func NewResponseAPIParam(opts ...ResponseAPIParamOption) *ResponseAPIParam {
+	param := &ResponseAPIParam{}
+
+	for _, opt := range opts {
+		opt(param)
+	}
+
+	return param
+}
+
+// ToRequestParam converts the ResponseAPIParam to a format suitable for making an API request to OpenAI,
+// specifically to the responses endpoint. It constructs the request parameters based on the system and user messages,
+// the model, and the expected response format.
+func (p *ResponseAPIParam) ToRequestParam() responses.ResponseNewParams {
 	var respFormat responses.ResponseFormatTextConfigUnionParam
 	if p.format != nil {
 		b, _ := json.Marshal(p.format)
@@ -46,20 +67,10 @@ func (p *ResponseAPIInputParam) ToRequestParam() responses.ResponseNewParams {
 	}
 }
 
-type ResponseAPIInputParamOption func(*ResponseAPIInputParam)
+type ResponseAPIParamOption func(*ResponseAPIParam)
 
-func NewResponseAPIParam(opts ...ResponseAPIInputParamOption) *ResponseAPIInputParam {
-	param := &ResponseAPIInputParam{}
-
-	for _, opt := range opts {
-		opt(param)
-	}
-
-	return param
-}
-
-func WithSystemMessage(content string) ResponseAPIInputParamOption {
-	return func(param *ResponseAPIInputParam) {
+func WithSystemMessage(content string) ResponseAPIParamOption {
+	return func(param *ResponseAPIParam) {
 		param.system = &responses.ResponseInputItemUnionParam{
 			OfMessage: &responses.EasyInputMessageParam{
 				Role: "system",
@@ -71,8 +82,8 @@ func WithSystemMessage(content string) ResponseAPIInputParamOption {
 	}
 }
 
-func WithUserMessage(content string) ResponseAPIInputParamOption {
-	return func(param *ResponseAPIInputParam) {
+func WithUserMessage(content string) ResponseAPIParamOption {
+	return func(param *ResponseAPIParam) {
 		param.user = &responses.ResponseInputItemUnionParam{
 			OfMessage: &responses.EasyInputMessageParam{
 				Role: "user",
@@ -83,7 +94,7 @@ func WithUserMessage(content string) ResponseAPIInputParamOption {
 		}
 	}
 }
-func WithPartsAsUserMessage(parts []part.Part) ResponseAPIInputParamOption {
+func WithPartsAsUserMessage(parts []part.Part) ResponseAPIParamOption {
 
 	var openaiParts responses.ResponseInputMessageContentListParam
 
@@ -95,7 +106,7 @@ func WithPartsAsUserMessage(parts []part.Part) ResponseAPIInputParamOption {
 		})
 	}
 
-	return func(param *ResponseAPIInputParam) {
+	return func(param *ResponseAPIParam) {
 		var content string
 		for _, p := range parts {
 			content += p.Text() + "\n"
@@ -111,14 +122,14 @@ func WithPartsAsUserMessage(parts []part.Part) ResponseAPIInputParamOption {
 	}
 }
 
-func WithModel(model string) ResponseAPIInputParamOption {
-	return func(param *ResponseAPIInputParam) {
+func WithModel(model string) ResponseAPIParamOption {
+	return func(param *ResponseAPIParam) {
 		param.model = shared.ChatModel(model)
 	}
 }
 
-func WithResponseFormat[T any]() ResponseAPIInputParamOption {
-	return func(p *ResponseAPIInputParam) {
+func WithResponseFormat[T any]() ResponseAPIParamOption {
+	return func(p *ResponseAPIParam) {
 		r := jsonschema.Reflector{
 			DoNotReference: true,
 		}
