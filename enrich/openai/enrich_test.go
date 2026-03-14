@@ -16,7 +16,7 @@ import (
 // ── fixtures ──────────────────────────────────────────
 
 func newParts() []part.Part {
-	data, _ := os.ReadFile("testdata/result_report.json")
+	data, _ := os.ReadFile("testdata/result_cowboys.json")
 	var cuParts []cu.CUPart
 	_ = json.Unmarshal(data, &cuParts)
 
@@ -94,10 +94,10 @@ func TestSemantify(t *testing.T) {
 	// testdata/semantify_result_cowboys.json 저장
 	raw, _ := json.MarshalIndent(doc, "", "  ")
 	_ = os.MkdirAll("testdata", 0755)
-	if err := os.WriteFile("testdata/semantify_report.json", raw, 0644); err != nil {
-		t.Logf("warn: failed to save semantify_report.json: %v", err)
+	if err := os.WriteFile("testdata/semantify_result_cowboys.json", raw, 0644); err != nil {
+		t.Logf("warn: failed to save semantify_result_cowboys.json: %v", err)
 	} else {
-		t.Logf("saved testdata/semantify_report.json")
+		t.Logf("saved testdata/semantify_result_cowboys.json")
 	}
 
 	t.Logf("chunks=%d", len(doc.Chunks))
@@ -175,5 +175,11 @@ func TestOpenAIEnricher_Enrich(t *testing.T) {
 			t.Errorf("doc[%d] embedding empty", i)
 		}
 		t.Logf("doc[%d] topic=%q keywords=%v", i, fields["topic"], keywords)
+	}
+	raw, _ := json.MarshalIndent(docs, "", "  ")
+	if err := os.WriteFile("testdata/enrich_result_cowboys.json", raw, 0644); err != nil {
+		t.Logf("warn: failed to save testdata/enrich_result_cowboys.json: %v", err)
+	} else {
+		t.Logf("saved testdata/enrich_result_cowboys.json")
 	}
 }

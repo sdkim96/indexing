@@ -6,9 +6,14 @@ import (
 	"encoding/hex"
 )
 
-type Cache interface {
+type CacheWriter interface {
 	Get(ctx context.Context, key string) ([]byte, bool, error)
 	Set(ctx context.Context, key string, value []byte) error
+}
+
+type Cache struct {
+	Key   string
+	Value []byte
 }
 
 type Cacheable interface {

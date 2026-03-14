@@ -1,6 +1,10 @@
 package search
 
-import "context"
+import (
+	"context"
+
+	"github.com/sdkim96/indexing/internal/uri"
+)
 
 // SearchDoc represents a document to be indexed in a search engine.
 type SearchDoc interface {
@@ -9,5 +13,5 @@ type SearchDoc interface {
 
 // SearchWriter writes SearchDocs to a search engine.
 type SearchWriter interface {
-	Write(ctx context.Context, docs []SearchDoc) error
+	Write(ctx context.Context, URI uri.URI, docs []SearchDoc) error
 }

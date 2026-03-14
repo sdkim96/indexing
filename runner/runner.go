@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"iter"
+	"sync"
 	"time"
 
 	"github.com/sdkim96/indexing/analyze"
@@ -12,11 +13,6 @@ import (
 	"github.com/sdkim96/indexing/part"
 	"github.com/sdkim96/indexing/search"
 )
-
-// Pipeline is the top-level interface for running an indexing pipeline.
-type Pipeline interface {
-	Run(ctx context.Context, sourceID string) error
-}
 
 // Event represents the completion of a pipeline stage.
 type Event struct {
@@ -32,12 +28,26 @@ type Runner struct {
 	partWriter   part.PartWriter
 	enricher     enrich.Enricher
 	searchWriter search.SearchWriter
-	cache        cache.Cache
+	cacheWriter  cache.CacheWriter
 }
 
 // Run executes the pipeline and yields Events via an iterator.
 func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		cacheChan := make(chan cache.Cache, ictx.CacheChanSize)
+		go func() {
+			defer wg.Done()
+			for item := range cacheChan {
+				_ = r.cacheWriter.Set(ctx, item.Key, item.Value)
+			}
+		}()
+		defer func() {
+			close(cacheChan)
+			wg.Wait()
+		}()
 
 		// 0단계: sourceID → Input 변환
 		start := time.Now()
@@ -49,7 +59,7 @@ func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event
 
 		// 1단계: 읽고 쪼갠다
 		start = time.Now()
-		parts, err := r.analyzer.Analyze(ctx, input)
+		parts, err := r.analyzer.Analyze(ctx, input, cacheChan)
 		if !yield(Event{"analyze", ictx, time.Since(start)}, err) {
 			return
 		}
@@ -64,7 +74,7 @@ func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event
 
 		// 3단계: 가공한다
 		start = time.Now()
-		docs, err := r.enricher.Enrich(ctx, ictx.Parts)
+		docs, err := r.enricher.Enrich(ctx, ictx.Parts, cacheChan)
 		if !yield(Event{"enrich", ictx, time.Since(start)}, err) {
 			return
 		}
@@ -72,7 +82,7 @@ func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event
 
 		// 4단계: 적재한다
 		start = time.Now()
-		err = r.searchWriter.Write(ctx, ictx.SearchDocs)
+		err = r.searchWriter.Write(ctx, ictx.SearchWriteKey, ictx.SearchDocs)
 		if !yield(Event{"search", ictx, time.Since(start)}, err) {
 			return
 		}

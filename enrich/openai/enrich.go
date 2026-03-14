@@ -41,7 +41,7 @@ func (e *OpenAIEnricher) Enrich(ctx context.Context, parts []part.Part) ([]searc
 		if err != nil {
 			return nil, err
 		}
-		docs = append(docs, SearchDoc{
+		docs = append(docs, OpenAISearchDoc{
 			Title:     chunk.Topic,
 			Embedding: embedding,
 			SummaryAndKeywords: SummaryAndKeywords{

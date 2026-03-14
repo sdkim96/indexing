@@ -25,7 +25,7 @@ func NewFileSystemClient(root string) (*FileSystemClient, error) {
 }
 
 func (c *FileSystemClient) Open(ctx context.Context, path string) (io.ReadCloser, Meta, error) {
-	fullPath := filepath.Join(c.root, path)
+	fullPath := c.resolve(path)
 	f, err := os.Open(fullPath)
 	if err != nil {
 		return nil, Meta{}, err
@@ -43,7 +43,7 @@ func (c *FileSystemClient) Open(ctx context.Context, path string) (io.ReadCloser
 }
 
 func (c *FileSystemClient) Create(ctx context.Context, path string, mimeType mime.Type) (io.WriteCloser, uri.URI, error) {
-	fullPath := filepath.Join(c.root, path)
+	fullPath := c.resolve(path)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return nil, uri.URI(""), err
 	}
@@ -52,4 +52,11 @@ func (c *FileSystemClient) Create(ctx context.Context, path string, mimeType mim
 		return nil, uri.URI(""), err
 	}
 	return f, uri.URI("file://" + fullPath), nil
+}
+
+func (c *FileSystemClient) resolve(path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(c.root, path)
 }
