@@ -5,23 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sdkim96/indexing/internal/mime"
-	"github.com/sdkim96/indexing/internal/storage"
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/part"
+	"github.com/sdkim96/indexing/storage"
+	"github.com/sdkim96/indexing/uri"
 )
 
 type FilePartWriter struct {
 	client *storage.FileSystemClient
 }
 
-func New(client *storage.FileSystemClient) *FilePartWriter {
-	return &FilePartWriter{client: client}
+func New(client *storage.FileSystemClient) FilePartWriter {
+	return FilePartWriter{client: client}
 }
 
 var _ part.PartWriter = (*FilePartWriter)(nil)
 
-func (w *FilePartWriter) Write(ctx context.Context, URI uri.URI, parts []part.Part) error {
+func (w FilePartWriter) Write(ctx context.Context, URI uri.URI, parts []part.Part) error {
 	if err := URI.Validate(); err != nil {
 		return err
 	}

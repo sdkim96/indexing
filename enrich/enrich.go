@@ -10,5 +10,5 @@ import (
 
 // Enricher processes Parts and produces SearchDocs for indexing.
 type Enricher interface {
-	Enrich(ctx context.Context, parts []part.Part, send chan<- cache.Cache) ([]search.SearchDoc, error)
+	Enrich(ctx context.Context, parts []part.Part, cache cache.Cache) ([]search.SearchDoc, error)
 }

@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/sdkim96/indexing/input"
-	"github.com/sdkim96/indexing/internal/mime"
+	"github.com/sdkim96/indexing/mime"
 )
 
 var _ input.Input = (*FileInput)(nil)
@@ -13,6 +13,14 @@ type FileInput struct {
 	readCloser io.ReadCloser
 	mimeType   mime.Type
 	meta       map[string]any
+}
+
+func NewFileInput(readCloser io.ReadCloser, mimeType mime.Type, meta map[string]any) input.Input {
+	return &FileInput{
+		readCloser: readCloser,
+		mimeType:   mimeType,
+		meta:       meta,
+	}
 }
 
 func (f *FileInput) Read(p []byte) (n int, err error) {
@@ -29,12 +37,4 @@ func (f *FileInput) MimeType() mime.Type {
 
 func (f *FileInput) Meta() map[string]any {
 	return f.meta
-}
-
-func NewFileInput(readCloser io.ReadCloser, mimeType mime.Type, meta map[string]any) input.Input {
-	return &FileInput{
-		readCloser: readCloser,
-		mimeType:   mimeType,
-		meta:       meta,
-	}
 }

@@ -5,23 +5,23 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sdkim96/indexing/internal/mime"
-	"github.com/sdkim96/indexing/internal/storage"
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/search"
+	"github.com/sdkim96/indexing/storage"
+	"github.com/sdkim96/indexing/uri"
 )
 
 type FileSearchWriter struct {
 	client *storage.FileSystemClient
 }
 
-func New(client *storage.FileSystemClient) *FileSearchWriter {
-	return &FileSearchWriter{client: client}
+func New(client *storage.FileSystemClient) FileSearchWriter {
+	return FileSearchWriter{client: client}
 }
 
 var _ search.SearchWriter = (*FileSearchWriter)(nil)
 
-func (w *FileSearchWriter) Write(ctx context.Context, URI uri.URI, docs []search.SearchDoc) error {
+func (w FileSearchWriter) Write(ctx context.Context, URI uri.URI, docs []search.SearchDoc) error {
 	if err := URI.Validate(); err != nil {
 		return err
 	}

@@ -10,5 +10,5 @@ import (
 
 // Analyzer analyzes raw data and produces Parts.
 type Analyzer interface {
-	Analyze(ctx context.Context, input input.Input, send chan<- cache.Cache) ([]part.Part, error)
+	Analyze(ctx context.Context, input input.Input, cache cache.Cache) ([]part.Part, error)
 }

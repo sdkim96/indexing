@@ -8,8 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/sdkim96/indexing/input"
-	"github.com/sdkim96/indexing/internal/mime"
+	"github.com/sdkim96/indexing/mime"
 )
 
 const APIHeaderKey = "Ocp-Apim-Subscription-Key"
@@ -39,14 +38,13 @@ func NewClient(endpoint, apiKey string, client *http.Client) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) Start(ctx context.Context, inp input.Input) (string, error) {
+func (c *HTTPClient) Start(ctx context.Context, b *Blob) (string, error) {
 
-	data, err := io.ReadAll(inp)
-	req, err := http.NewRequestWithContext(ctx, "POST", startURL(c.endpoint), bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, "POST", startURL(c.endpoint), bytes.NewReader(b.Data))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", string(inp.MimeType()))
+	req.Header.Set("Content-Type", b.Mime)
 
 	resp, err := c.do(ctx, req)
 	if err != nil {

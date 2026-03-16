@@ -2,14 +2,19 @@ package file
 
 import (
 	"context"
-	"os"
 
 	"github.com/sdkim96/indexing/input"
-	"github.com/sdkim96/indexing/internal/mime"
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/mime"
+	"github.com/sdkim96/indexing/storage"
+	"github.com/sdkim96/indexing/uri"
 )
 
 type FileProvider struct {
+	client *storage.FileSystemClient
+}
+
+func New(client *storage.FileSystemClient) FileProvider {
+	return FileProvider{client: client}
 }
 
 var _ input.Provider = (*FileProvider)(nil)
@@ -20,28 +25,21 @@ type FileMeta struct {
 }
 
 // FileProvider assumes that the form of key must be "file://{path}" and provides FileInput.
-func (p *FileProvider) Provide(ctx context.Context, key uri.URI) (input.Input, error) {
-	if err := key.Validate(); err != nil {
+func (p FileProvider) Provide(ctx context.Context, URI uri.URI) (input.Input, error) {
+	if err := URI.Validate(); err != nil {
 		return nil, input.ErrInvalidSourceKey
 	}
-	if key.Scheme() != "file" {
+	if URI.Scheme() != "file" {
 		return nil, input.ErrUnsupportedSourceScheme
 	}
 
-	file, err := os.Open(key.Path())
+	f, meta, err := p.client.Open(ctx, URI.Path())
 	if err != nil {
 		return nil, err
 	}
-
-	var meta map[string]any
-	if info, err := file.Stat(); err == nil {
-		meta = map[string]any{
-			"name": info.Name(),
-			"size": info.Size(),
-		}
-	} else {
-		meta = map[string]any{}
+	var m map[string]any = map[string]any{
+		"name": meta.FileName,
+		"size": meta.Size,
 	}
-
-	return NewFileInput(file, mime.GuessMimeType(key.Path()), meta), nil
+	return NewFileInput(f, mime.GuessMimeType(URI.Path()), m), nil
 }

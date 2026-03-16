@@ -9,12 +9,60 @@ import (
 	"github.com/sdkim96/indexing/search"
 )
 
-// Config holds all dependencies for building a Pipeline.
+// Config holds all implementations for running the indexing pipeline.
+//
+// Essentials:
+//   - Provider
+//   - Analyzer
+//   - PartWriter
+//
+// Optionals:
+//   - Enricher
+//   - SearchWriter
+//   - Cache
 type Config struct {
-	Provider     input.Provider      // 필수
-	Analyzer     analyze.Analyzer    // 필수
-	PartWriter   part.PartWriter     // 필수
-	Enricher     enrich.Enricher     // 선택 (nil → noop)
-	SearchWriter search.SearchWriter // 선택 (nil → noop)
-	CacheWriter  cache.Cache         // 선택 (nil → noop)
+	Provider     input.Provider
+	Analyzer     analyze.Analyzer
+	PartWriter   part.PartWriter
+	Enricher     enrich.Enricher
+	SearchWriter search.SearchWriter
+	Cache        cache.Cache
+}
+
+type ConfigOpt func(*Config)
+
+func WithProvider(p input.Provider) ConfigOpt {
+	return func(cfg *Config) {
+		cfg.Provider = p
+	}
+}
+
+func WithAnalyzer(a analyze.Analyzer) ConfigOpt {
+	return func(cfg *Config) {
+		cfg.Analyzer = a
+	}
+}
+
+func WithPartWriter(w part.PartWriter) ConfigOpt {
+	return func(cfg *Config) {
+		cfg.PartWriter = w
+	}
+}
+
+func WithEnricher(e enrich.Enricher) ConfigOpt {
+	return func(cfg *Config) {
+		cfg.Enricher = e
+	}
+}
+
+func WithSearchWriter(w search.SearchWriter) ConfigOpt {
+	return func(cfg *Config) {
+		cfg.SearchWriter = w
+	}
+}
+
+func WithCache(c cache.Cache) ConfigOpt {
+	return func(cfg *Config) {
+		cfg.Cache = c
+	}
 }

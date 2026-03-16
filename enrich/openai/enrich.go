@@ -6,6 +6,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/sdkim96/indexing/cache"
 	"github.com/sdkim96/indexing/enrich"
 	"github.com/sdkim96/indexing/part"
 	"github.com/sdkim96/indexing/search"
@@ -25,25 +26,51 @@ func New(apiKey string) *OpenAIEnricher {
 // Enrich takes a list of document parts, processes them using OpenAI's API to group related parts together,
 // summarize the content, extract keywords, and generate embeddings. It returns a list of SearchDoc objects
 // that contain the enriched information for each topic identified in the document.
-func (e *OpenAIEnricher) Enrich(ctx context.Context, parts []part.Part) ([]search.SearchDoc, error) {
+func (e *OpenAIEnricher) Enrich(ctx context.Context, parts []part.Part, c cache.Cache) ([]search.SearchDoc, error) {
 	oaiClient := openai.NewClient(
 		option.WithAPIKey(e.apiKey),
 	)
 
-	doc, err := Semantify(ctx, oaiClient, parts)
+	semantifyReq := NewResponseAPIParam(
+		WithSystemMessage(enrichPrompt),
+		WithPartsAsUserMessage(parts),
+		WithModel("gpt-5-nano"),
+		WithResponseFormat[Document](),
+		WithReasoningEffort("medium"),
+	)
+	val, err := c.GetOrSet(ctx, semantifyReq.FingerPrint("semantify"), func() ([]byte, error) {
+		return Semantify(ctx, oaiClient, semantifyReq)
+	})
+	if err != nil {
+		return nil, err
+	}
+	var d Document
+	err = json.Unmarshal(val, &d)
 	if err != nil {
 		return nil, err
 	}
 
 	var docs []search.SearchDoc
-	for _, chunk := range doc.Chunks {
-		embedding, err := Embed(ctx, oaiClient, chunk.Summary)
+	for _, chunk := range d.Chunks {
+
+		embeddingReq := NewEmbeddingAPIParam(
+			WithEmbeddingInput(chunk.Summary),
+			WithEmbeddingModel("text-embedding-3-small"),
+		)
+		val, err := c.GetOrSet(ctx, embeddingReq.FingerPrint("embedding"), func() ([]byte, error) {
+			return Embed(ctx, oaiClient, embeddingReq)
+		})
+		if err != nil {
+			return nil, err
+		}
+		var embedding []float64
+		err = json.Unmarshal(val, &embedding)
 		if err != nil {
 			return nil, err
 		}
 		docs = append(docs, OpenAISearchDoc{
 			Title:     chunk.Topic,
-			Embedding: embedding,
+			Embedding: Embedding{vector: embedding},
 			SummaryAndKeywords: SummaryAndKeywords{
 				Summary:  Summary{text: chunk.Summary},
 				Keywords: Keywords{words: chunk.Keywords},
@@ -57,34 +84,23 @@ func (e *OpenAIEnricher) Enrich(ctx context.Context, parts []part.Part) ([]searc
 	return docs, nil
 }
 
-func Semantify(ctx context.Context, c openai.Client, parts []part.Part) (Document, error) {
-	resp, err := c.Responses.New(ctx, NewResponseAPIParam(
-		WithSystemMessage(enrichPrompt),
-		WithPartsAsUserMessage(parts),
-		WithModel("gpt-5-nano"),
-		WithResponseFormat[Document](),
-		WithReasoningEffort("medium"),
-	).ToRequestParam())
+func Semantify(ctx context.Context, c openai.Client, req *ResponseAPIParam) ([]byte, error) {
+	resp, err := c.Responses.New(ctx, req.ToRequestParam())
 	if err != nil {
-		return Document{}, err
+		return nil, err
 	}
-
-	var result Document
-	if err := json.Unmarshal([]byte(resp.OutputText()), &result); err != nil {
-		return Document{}, err
-	}
-	return result, nil
+	return []byte(resp.OutputText()), nil
 }
 
-func Embed(ctx context.Context, c openai.Client, text string) (Embedding, error) {
+func Embed(ctx context.Context, c openai.Client, req *EmbeddingAPIParam) ([]byte, error) {
 	resp, err := c.Embeddings.New(ctx, openai.EmbeddingNewParams{
 		Input: openai.EmbeddingNewParamsInputUnion{
-			OfString: openai.String(text),
+			OfString: openai.String(req.input),
 		},
-		Model: "text-embedding-3-small",
+		Model: req.model,
 	})
 	if err != nil {
-		return Embedding{}, err
+		return nil, err
 	}
-	return Embedding{vector: resp.Data[0].Embedding}, nil
+	return json.Marshal(resp.Data[0].Embedding)
 }

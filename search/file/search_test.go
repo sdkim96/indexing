@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/sdkim96/indexing/enrich/openai"
-	"github.com/sdkim96/indexing/internal/storage"
-	"github.com/sdkim96/indexing/internal/uri"
 	"github.com/sdkim96/indexing/search"
+	"github.com/sdkim96/indexing/storage"
+	"github.com/sdkim96/indexing/uri"
 )
 
 const testDocURI = "file:///Users/sungdongkim/works/indexing/search/file/testdata/enrich_result_cowboys.json"

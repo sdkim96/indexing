@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sdkim96/indexing/internal/mime"
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/part"
+	"github.com/sdkim96/indexing/uri"
 )
 
 type Role string

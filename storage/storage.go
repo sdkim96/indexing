@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/sdkim96/indexing/internal/mime"
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/mime"
+	"github.com/sdkim96/indexing/uri"
 )
 
 type Meta struct {

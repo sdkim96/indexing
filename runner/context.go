@@ -3,21 +3,27 @@ package runner
 import (
 	"time"
 
-	"github.com/sdkim96/indexing/internal/uri"
 	"github.com/sdkim96/indexing/part"
 	"github.com/sdkim96/indexing/search"
+	"github.com/sdkim96/indexing/uri"
 )
 
 // IndexingContext carries data across pipeline stages.
 type IndexingContext struct {
-	// 실행 메타
-	InputKey       uri.URI
-	PartWriteKey   uri.URI
-	SearchWriteKey uri.URI
-	StartedAt      time.Time
-	CacheChanSize  int
+	// Input, PartWrite, SearchWrite Keys are used to identify data location in each stage.
+	InputKey, PartWriteKey, SearchWriteKey uri.URI
+	StartedAt                              time.Time
 
-	// 단계별로 채워짐
-	Parts      []part.Part        // Analyzer 이후 존재
-	SearchDocs []search.SearchDoc // Enricher 이후 존재
+	// Populated during pipeline execution.
+	Parts      []part.Part
+	SearchDocs []search.SearchDoc
+}
+
+func NewICtx(inputKey, partWriteKey, searchWriteKey string) *IndexingContext {
+	return &IndexingContext{
+		InputKey:       uri.URI(inputKey),
+		PartWriteKey:   uri.URI(partWriteKey),
+		SearchWriteKey: uri.URI(searchWriteKey),
+		StartedAt:      time.Now(),
+	}
 }

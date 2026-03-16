@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"iter"
-	"sync"
 	"time"
 
 	"github.com/sdkim96/indexing/analyze"
@@ -28,28 +27,13 @@ type Runner struct {
 	partWriter   part.PartWriter
 	enricher     enrich.Enricher
 	searchWriter search.SearchWriter
-	cacheWriter  cache.CacheWriter
+	cache        cache.Cache
 }
 
 // Run executes the pipeline and yields Events via an iterator.
 func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
 
-		var wg sync.WaitGroup
-		wg.Add(1)
-		cacheChan := make(chan cache.Cache, ictx.CacheChanSize)
-		go func() {
-			defer wg.Done()
-			for item := range cacheChan {
-				_ = r.cacheWriter.Set(ctx, item.Key, item.Value)
-			}
-		}()
-		defer func() {
-			close(cacheChan)
-			wg.Wait()
-		}()
-
-		// 0단계: sourceID → Input 변환
 		start := time.Now()
 		input, err := r.provider.Provide(ctx, ictx.InputKey)
 		if !yield(Event{"provide", ictx, time.Since(start)}, err) {
@@ -57,30 +41,26 @@ func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event
 		}
 		defer input.Close()
 
-		// 1단계: 읽고 쪼갠다
 		start = time.Now()
-		parts, err := r.analyzer.Analyze(ctx, input, cacheChan)
+		parts, err := r.analyzer.Analyze(ctx, input, r.cache)
 		if !yield(Event{"analyze", ictx, time.Since(start)}, err) {
 			return
 		}
 		ictx.Parts = parts
 
-		// 2단계: 저장한다
 		start = time.Now()
 		err = r.partWriter.Write(ctx, ictx.PartWriteKey, ictx.Parts)
 		if !yield(Event{"part", ictx, time.Since(start)}, err) {
 			return
 		}
 
-		// 3단계: 가공한다
 		start = time.Now()
-		docs, err := r.enricher.Enrich(ctx, ictx.Parts, cacheChan)
+		docs, err := r.enricher.Enrich(ctx, ictx.Parts, r.cache)
 		if !yield(Event{"enrich", ictx, time.Since(start)}, err) {
 			return
 		}
 		ictx.SearchDocs = docs
 
-		// 4단계: 적재한다
 		start = time.Now()
 		err = r.searchWriter.Write(ctx, ictx.SearchWriteKey, ictx.SearchDocs)
 		if !yield(Event{"search", ictx, time.Since(start)}, err) {

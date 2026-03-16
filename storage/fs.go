@@ -6,14 +6,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sdkim96/indexing/internal/mime"
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/mime"
+	"github.com/sdkim96/indexing/uri"
 )
 
 var _ Client = (*FileSystemClient)(nil)
 
 type FileSystemClient struct {
 	root string
+}
+
+func (c FileSystemClient) Root() string {
+	return c.root
 }
 
 func NewFileSystemClient(root string) (*FileSystemClient, error) {

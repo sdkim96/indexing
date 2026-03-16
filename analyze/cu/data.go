@@ -1,6 +1,6 @@
 package cu
 
-import "github.com/sdkim96/indexing/internal/uri"
+import "github.com/sdkim96/indexing/uri"
 
 type DataType string
 

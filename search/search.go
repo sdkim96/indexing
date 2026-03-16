@@ -3,7 +3,7 @@ package search
 import (
 	"context"
 
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/uri"
 )
 
 // SearchDoc represents a document to be indexed in a search engine.

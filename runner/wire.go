@@ -11,7 +11,11 @@ import (
 )
 
 // New validates the Config and assembles a Runner.
-func New(cfg Config) (*Runner, error) {
+func New(opts ...ConfigOpt) (*Runner, error) {
+	cfg := &Config{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
 	if cfg.Provider == nil {
 		return nil, errors.New("source provider is required")
 	}
@@ -32,12 +36,18 @@ func New(cfg Config) (*Runner, error) {
 		sw = &NoopSearchWriter{}
 	}
 
+	cache := cfg.Cache
+	if cache == nil {
+		cache = &NoopCache{}
+	}
+
 	return &Runner{
 		provider:     cfg.Provider,
 		analyzer:     cfg.Analyzer,
 		partWriter:   cfg.PartWriter,
 		enricher:     enricher,
 		searchWriter: sw,
+		cache:        cache,
 	}, nil
 }
 

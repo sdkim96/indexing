@@ -4,15 +4,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sdkim96/indexing/internal/uri"
+	"github.com/sdkim96/indexing/uri"
 )
 
-// Provider is responsible for providing an Input based on a URI.
-// The process that provider do
-// is by reading the data from the source identified by the URI
-// and returning an Input that can be used to read the data.
+// Provider reads the data from the source identified by the URI
+// and returns an Input that can be used to read the data.
 type Provider interface {
-	Provide(ctx context.Context, key uri.URI) (Input, error)
+	Provide(ctx context.Context, URI uri.URI) (Input, error)
 }
 
 var ErrUnsupportedSourceScheme error = errors.New("unsupported source key. check the scheme.")

@@ -8,6 +8,7 @@ import (
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/responses"
 	"github.com/openai/openai-go/shared"
+	"github.com/sdkim96/indexing/cache"
 	"github.com/sdkim96/indexing/part"
 )
 
@@ -23,6 +24,59 @@ type ResponseAPIParam struct {
 	format          *jsonschema.Schema
 	reasoningEffort shared.ReasoningEffort
 	temperature     float64
+}
+
+func (p *ResponseAPIParam) System() *responses.ResponseInputItemUnionParam {
+	return p.system
+}
+
+func (p *ResponseAPIParam) User() *responses.ResponseInputItemUnionParam {
+	return p.user
+}
+
+func (p *ResponseAPIParam) Model() shared.ResponsesModel {
+	return p.model
+}
+
+func (p *ResponseAPIParam) Format() *jsonschema.Schema {
+	return p.format
+}
+
+func (p *ResponseAPIParam) ReasoningEffort() shared.ReasoningEffort {
+	return p.reasoningEffort
+}
+
+func (p *ResponseAPIParam) Temperature() float64 {
+	return p.temperature
+}
+
+func (p *ResponseAPIParam) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		System      *responses.ResponseInputItemUnionParam `json:"system,omitempty"`
+		User        *responses.ResponseInputItemUnionParam `json:"user,omitempty"`
+		Model       shared.ResponsesModel                  `json:"model,omitempty"`
+		Format      *jsonschema.Schema                     `json:"format,omitempty"`
+		Reasoning   shared.ReasoningEffort                 `json:"reasoning_effort,omitempty"`
+		Temperature float64                                `json:"temperature,omitempty"`
+	}{
+		System:      p.system,
+		User:        p.user,
+		Model:       p.model,
+		Format:      p.format,
+		Reasoning:   p.reasoningEffort,
+		Temperature: p.temperature,
+	})
+}
+
+var _ cache.Hasher = (*ResponseAPIParam)(nil)
+
+func (p *ResponseAPIParam) FingerPrint(prefix string) string {
+	b, _ := json.Marshal(p)
+	key := cache.Sha256(b)
+	if prefix != "" {
+		key = prefix + ":" + key
+	}
+	return key
 }
 
 // NewResponseAPIParam creates a new ResponseAPIParam with the given options,
@@ -167,5 +221,61 @@ func WithReasoningEffort(level string) ResponseAPIParamOption {
 func WithTemperature(temp float64) ResponseAPIParamOption {
 	return func(p *ResponseAPIParam) {
 		p.temperature = temp
+	}
+}
+
+type EmbeddingAPIParam struct {
+	input string
+	model string
+}
+
+func (p *EmbeddingAPIParam) Input() string {
+	return p.input
+}
+
+func (p *EmbeddingAPIParam) Model() string {
+	return p.model
+}
+
+func (p *EmbeddingAPIParam) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Input string `json:"input,omitempty"`
+		Model string `json:"model,omitempty"`
+	}{
+		Input: p.input,
+		Model: p.model,
+	})
+}
+
+func (p *EmbeddingAPIParam) FingerPrint(prefix string) string {
+	b, _ := json.Marshal(p)
+	key := cache.Sha256(b)
+	if prefix != "" {
+		key = prefix + ":" + key
+	}
+	return key
+}
+
+var _ cache.Hasher = (*EmbeddingAPIParam)(nil)
+
+func NewEmbeddingAPIParam(opts ...EmbeddingAPIParamOption) *EmbeddingAPIParam {
+	p := &EmbeddingAPIParam{}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
+}
+
+type EmbeddingAPIParamOption func(*EmbeddingAPIParam)
+
+func WithEmbeddingInput(input string) EmbeddingAPIParamOption {
+	return func(p *EmbeddingAPIParam) {
+		p.input = input
+	}
+}
+
+func WithEmbeddingModel(model string) EmbeddingAPIParamOption {
+	return func(p *EmbeddingAPIParam) {
+		p.model = model
 	}
 }
