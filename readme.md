@@ -1,16 +1,59 @@
-# indexing
+# 🏃 Indexing Runner
 
-A Go pipeline library for indexing documents into search engines. Processes PDFs, images, and other document types through analysis, enrichment, and search indexing stages.
+Indexing Runner is a kit that provides a canonical way to form an indexing pipeline, serving several interfaces and useful implementations. You can build your own implementations, or use prebuilt tools such as **Azure Content Understanding Analyzer** or **OpenAI Enricher** to orchestrate this pipeline.
 
-## Architecture
+---
+
+## 🔗 URI-First Design
+
+Every I/O boundary in this pipeline is addressed by a **URI**. There are no raw file paths or opaque strings — every source and destination is expressed as a typed URI.
+
+```
+file://cowboys.pdf       → input source on local filesystem
+file://parts.json        → part write destination
+file://search.json       → search write destination
+```
+
+The URI scheme determines which `storage.Client` implementation handles the I/O:
+
+| Scheme | Implementation |
+|---|---|
+| `file://` | `storage.FileSystemClient` |
+| `https://` | Azure Blob Storage (planned) |
+
+This makes the pipeline **location-agnostic** — swapping from local filesystem to cloud storage only requires changing the URI scheme and injecting a different `storage.Client`. The pipeline code itself does not change.
+
+```go
+// URI parsing
+type URI string
+
+func (u URI) Scheme() string  // "file", "https", ...
+func (u URI) Path() string    // "/absolute/path" or "relative/path"
+func (u URI) Validate() error // checks scheme and path
+```
+
+---
+
+## 🏛️ Architecture
+
+The main flow of this pipeline is:
+
+1. 📥 Reading bytes from an unknown source
+2. 🔍 Analyzing the bytes and generating parts
+3. 💾 Storing the parts
+4. ✨ Enriching the parts, optimizing the data form
+5. 🔎 Indexing the data to a search engine
+6. ⚡ Caching expensive computations or I/O calls
 
 ```
 Input → Analyze → Part Storage → Enrich → Search Indexing
 ```
 
-The library defines interfaces for each stage. Domain teams inject their own implementations via the builder pattern. `analyze` + `part` are required; `enrich`, `search`, and `cache` are optional.
+The library defines interfaces for each stage. Domain teams inject their own implementations via the builder pattern. `analyze` + `part` are **required**; `enrich`, `search`, and `cache` are **optional**.
 
-## Project Structure
+---
+
+## 📁 Project Structure
 
 ```
 cmd/indexing/          Entry point — assembles Config and runs pipeline
@@ -33,19 +76,21 @@ uri/                   URI parsing ({scheme}://{path})
 mime/                  MIME type utilities
 ```
 
-## Interfaces
+---
+
+## 🔌 Interfaces
 
 | Interface | Required | Role |
 |---|---|---|
-| `Provider` | Yes | URI → Input |
-| `Analyzer` | Yes | Input → []Part |
-| `PartWriter` | Yes | Persists analyzed Parts |
-| `Enricher` | No | Parts → []SearchDoc (noop if absent) |
-| `SearchWriter` | No | Writes SearchDocs to search engine (noop if absent) |
-| `Cache` | No | Caches expensive API calls |
+| `Provider` | ✅ Yes | URI → Input |
+| `Analyzer` | ✅ Yes | Input → []Part |
+| `PartWriter` | ✅ Yes | Persists analyzed Parts |
+| `Enricher` | ⬜ No | Parts → []SearchDoc (noop if absent) |
+| `SearchWriter` | ⬜ No | Writes SearchDocs to search engine (noop if absent) |
+| `Cache` | ⬜ No | Caches expensive API calls |
 
 ```go
-// input
+// 📥 input
 type Input interface {
     io.ReadCloser
     MimeType() mime.Type
@@ -56,12 +101,12 @@ type Provider interface {
     Provide(ctx context.Context, URI uri.URI) (Input, error)
 }
 
-// analyze
+// 🔍 analyze
 type Analyzer interface {
     Analyze(ctx context.Context, input input.Input, cache cache.Cache) ([]part.Part, error)
 }
 
-// part
+// 🧩 part
 type Part interface {
     MimeType() mime.Type
     Text()     string
@@ -72,12 +117,12 @@ type PartWriter interface {
     Write(ctx context.Context, URI uri.URI, parts []Part) error
 }
 
-// enrich
+// ✨ enrich
 type Enricher interface {
     Enrich(ctx context.Context, parts []part.Part, cache cache.Cache) ([]search.SearchDoc, error)
 }
 
-// search
+// 🔎 search
 type SearchDoc interface {
     Fields() map[string]any
 }
@@ -86,13 +131,15 @@ type SearchWriter interface {
     Write(ctx context.Context, URI uri.URI, docs []SearchDoc) error
 }
 
-// cache
+// ⚡ cache
 type Cache interface {
     GetOrSet(ctx context.Context, key string, fn func() ([]byte, error)) ([]byte, error)
 }
 ```
 
-## Pipeline Execution
+---
+
+## ⚙️ Pipeline Execution
 
 The `Runner` executes stages in order and yields `Event`s via `iter.Seq2[Event, error]`. The caller decides whether to continue or abort on error.
 
@@ -104,30 +151,32 @@ type Event struct {
 }
 ```
 
-## Usage
+---
+
+## 🚀 Usage
 
 ```go
-// 1. Create storage client
-storage, _ := storage.NewFileSystemClient("testdata")
+// 1️⃣ Create storage client
+fsClient, _ := storage.NewFileSystemClient("testdata")
 
-// 2. Assemble pipeline
+// 2️⃣ Assemble pipeline
 r, _ := runner.New(
-    runner.WithProvider(fileinput.New(storage)),
-    runner.WithAnalyzer(cu.New(storage, cu.NewClient(endpoint, apiKey, http.DefaultClient))),
-    runner.WithPartWriter(partfile.New(storage)),
+    runner.WithProvider(fileinput.New(fsClient)),
+    runner.WithAnalyzer(cu.New(fsClient, cu.NewClient(endpoint, apiKey, http.DefaultClient))),
+    runner.WithPartWriter(partfile.New(fsClient)),
     runner.WithEnricher(openai.New(oaiApiKey)),
-    runner.WithSearchWriter(searchfile.New(storage)),
-    runner.WithCache(filecache.New(storage)),
+    runner.WithSearchWriter(searchfile.New(fsClient)),
+    runner.WithCache(filecache.New(fsClient)),
 )
 
-// 3. Create indexing context with URIs
+// 3️⃣ Create indexing context with URIs
 ictx := runner.NewICtx(
     "file://cowboys.pdf",   // input source
     "file://parts.json",    // part write destination
     "file://search.json",   // search write destination
 )
 
-// 4. Run pipeline
+// 4️⃣ Run pipeline
 for event, err := range r.Run(ctx, ictx) {
     if err != nil {
         log.Fatalf("failed at %s: %v", event.Stage, err)
@@ -136,35 +185,33 @@ for event, err := range r.Run(ctx, ictx) {
 }
 ```
 
-## Environment Variables
+---
 
-| Variable | Service | Required |
-|---|---|---|
-| `AZURE_AI_SERVICES_ENDPOINT` | Azure Content Understanding | For CU analyzer |
-| `AZURE_AI_FOUNDARY_API_KEY` | Azure AI Services | For CU analyzer |
-| `OPENAI_API_KEY` | OpenAI | For enrichment |
+## 🔁 Idempotency
 
-## Idempotency
-
-The Runner does not guarantee idempotency — it provides the **structure** for it. Each implementation is responsible for its own guarantees:
+The Runner does not guarantee idempotency — it provides the **structure** for it. Each implementation is responsible for its own guarantees.
 
 | Stage | Strategy |
 |---|---|
-| Analyze | Cache hit skips Azure CU API call |
-| Part | Overwrite on write |
-| Enrich | Cache hit skips OpenAI API calls |
-| Search | Upsert semantics in search engine |
+| 🔍 Analyze | Cache hit skips Azure CU API call |
+| 💾 Part | Overwrite on write |
+| ✨ Enrich | Cache hit skips OpenAI API calls |
+| 🔎 Search | Upsert semantics in search engine |
 
 On re-execution, cached stages are skipped automatically if the `Cache` implementation is provided.
 
-## Dependencies
+---
 
-- Go 1.25+
+## 📦 Dependencies
+
+- **Go 1.23+** — required for `iter.Seq2`
 - `github.com/openai/openai-go` — OpenAI client
 - `github.com/google/uuid` — UUID generation
 - `github.com/invopop/jsonschema` — JSON schema for structured output
 
-## Dependency Direction
+---
+
+## 🧭 Dependency Direction
 
 ```
 runner/    →  input, analyze, part, enrich, search, cache
@@ -178,5 +225,3 @@ storage/   →  (independent)
 uri/       →  (independent)
 mime/      →  (independent)
 ```
-
-The library never imports domain code. Domain repos import this library's interfaces and inject implementations.

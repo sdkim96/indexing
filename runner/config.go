@@ -1,3 +1,17 @@
+// Copyright 2026 Sungdong Kim
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package runner
 
 import (
@@ -11,15 +25,15 @@ import (
 
 // Config holds all implementations for running the indexing pipeline.
 //
-// Essentials:
-//   - Provider
-//   - Analyzer
-//   - PartWriter
+// Required fields:
+//   - Provider: resolves a URI to an Input
+//   - Analyzer: processes an Input into Parts
+//   - PartWriter: persists the analyzed Parts
 //
-// Optionals:
-//   - Enricher
-//   - SearchWriter
-//   - Cache
+// Optional fields (noop implementations used if nil):
+//   - Enricher: enriches Parts into SearchDocs
+//   - SearchWriter: writes SearchDocs to a search engine
+//   - Cache: caches expensive operations such as API calls
 type Config struct {
 	Provider     input.Provider
 	Analyzer     analyze.Analyzer
