@@ -26,6 +26,7 @@ import (
 	"github.com/sdkim96/indexing/analyze"
 	"github.com/sdkim96/indexing/cache"
 	"github.com/sdkim96/indexing/input"
+	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/part"
 	"github.com/sdkim96/indexing/urio"
 )
@@ -34,7 +35,7 @@ const MaxPollInterval = 60 * time.Second
 
 type CU struct {
 	http             *HTTPClient
-	figWriter        func(ctx context.Context, name string) (urio.WriteCloser, error)
+	figWriter        func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error)
 	pollCallbackFunc func(status OperationStatus)
 	pollInterval     time.Duration
 }
@@ -43,7 +44,7 @@ var _ analyze.Analyzer = (*CU)(nil)
 
 func New(
 	http *HTTPClient,
-	figWriter func(ctx context.Context, name string) (urio.WriteCloser, error),
+	figWriter func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error),
 	opts ...CUOptions,
 ) *CU {
 	cu := &CU{

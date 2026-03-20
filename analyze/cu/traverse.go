@@ -40,7 +40,7 @@ type figureRequest struct {
 	headings   []string
 }
 
-func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, figWriter func(ctx context.Context, name string) (urio.WriteCloser, error)) ([]part.Part, error) {
+func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, figWriter func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error)) ([]part.Part, error) {
 	if result.Result == nil {
 		return nil, fmt.Errorf("operation %q result is nil: check if the operation completed successfully", result.ID)
 	}
@@ -80,7 +80,7 @@ func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, fig
 	return parts, nil
 }
 
-func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, figWriter func(ctx context.Context, name string) (urio.WriteCloser, error)) (uri urio.URI, mimeType mime.Type, err error) {
+func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, figWriter func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error)) (uri urio.URI, mimeType mime.Type, err error) {
 	data, contentType, err := http.GetFigure(ctx, FigureRequest{
 		OpID:       req.opID,
 		ContentIdx: req.contentIdx,
@@ -92,7 +92,7 @@ func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, figW
 
 	ext := mime.GuessExtension(contentType)
 	storageKey := fmt.Sprintf("figures/%s/%s%s", req.fileID, req.figureID, ext)
-	w, err := figWriter(ctx, storageKey)
+	w, err := figWriter(ctx, storageKey, contentType)
 	if err != nil {
 		return "", "", err
 	}

@@ -23,6 +23,7 @@ import (
 	cache "github.com/sdkim96/indexing/cache/file"
 	oai "github.com/sdkim96/indexing/enrich/openai"
 	input "github.com/sdkim96/indexing/input/file"
+	"github.com/sdkim96/indexing/mime"
 	part "github.com/sdkim96/indexing/part/file"
 	"github.com/sdkim96/indexing/runner"
 	search "github.com/sdkim96/indexing/search/file"
@@ -50,7 +51,7 @@ func main() {
 	cache := cache.New("testdata/cache")
 	cuAnalyzer := cu.New(
 		cu.NewClient(cuAIServiceEndpoint, cuFoundaryAPIKey, http.DefaultClient),
-		func(ctx context.Context, name string) (urio.WriteCloser, error) {
+		func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error) {
 			return cu.NewFileFigWriter(urio.URI("file://testdata/" + name))
 		},
 	)
