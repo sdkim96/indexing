@@ -17,27 +17,31 @@ package file
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/sdkim96/indexing/cache"
-	"github.com/sdkim96/indexing/mime"
-	"github.com/sdkim96/indexing/storage"
 )
 
+// FileCache is a file-based cache that stores values as files in a directory.
+// Each key maps to a file within the directory.
 type FileCache struct {
-	client      *storage.FileSystemClient
+	dir         string
 	hitCallback func(key string)
 }
 
-func New(client *storage.FileSystemClient, opts ...FileCacheOptions) FileCache {
-	c := FileCache{client: client}
+// New creates a new FileCache that stores cache files in the given directory.
+func New(dir string, opts ...FileCacheOptions) *FileCache {
+	c := &FileCache{dir: dir}
 	for _, opt := range opts {
-		opt(&c)
+		opt(c)
 	}
 	return c
 }
 
 type FileCacheOptions func(*FileCache)
 
+// WithCacheHitCallback sets a callback that is called when a cache hit occurs.
 func WithCacheHitCallback(callback func(key string)) FileCacheOptions {
 	return func(c *FileCache) {
 		c.hitCallback = callback
@@ -46,9 +50,14 @@ func WithCacheHitCallback(callback func(key string)) FileCacheOptions {
 
 var _ cache.Cache = (*FileCache)(nil)
 
-func (c FileCache) GetOrSet(ctx context.Context, key string, fn func() ([]byte, error)) ([]byte, error) {
+// GetOrSet retrieves the cached value for the given key.
+// If the key does not exist, it calls fn to generate the value,
+// stores it in the cache, and returns it.
+// If storing fails, the generated value is still returned without error.
+func (c *FileCache) GetOrSet(ctx context.Context, key string, fn func() ([]byte, error)) ([]byte, error) {
+	path := filepath.Join(c.dir, key)
 
-	f, _, err := c.client.Open(ctx, key)
+	f, err := os.OpenFile(path, os.O_RDONLY, 0644)
 	if err == nil {
 		defer f.Close()
 		if c.hitCallback != nil {
@@ -62,7 +71,10 @@ func (c FileCache) GetOrSet(ctx context.Context, key string, fn func() ([]byte, 
 		return nil, err
 	}
 
-	w, _, err := c.client.Create(ctx, key, mime.MimeJSON)
+	if err := os.MkdirAll(c.dir, 0755); err != nil {
+		return data, nil
+	}
+	w, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return data, nil
 	}

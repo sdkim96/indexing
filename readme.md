@@ -1,36 +1,6 @@
-# 🏃 Indexing Runner
+# 🏃 Indexing
 
-Indexing Runner is a kit that provides a canonical way to form an indexing pipeline, serving several interfaces and useful implementations. You can build your own implementations, or use prebuilt tools such as **Azure Content Understanding Analyzer** or **OpenAI Enricher** to orchestrate this pipeline.
-
----
-
-## 🔗 URI-First Design
-
-Every I/O boundary in this pipeline is addressed by a **URI**. There are no raw file paths or opaque strings — every source and destination is expressed as a typed URI.
-
-```
-file://cowboys.pdf       → input source on local filesystem
-file://parts.json        → part write destination
-file://search.json       → search write destination
-```
-
-The URI scheme determines which `storage.Client` implementation handles the I/O:
-
-| Scheme | Implementation |
-|---|---|
-| `file://` | `storage.FileSystemClient` |
-| `https://` | Azure Blob Storage (planned) |
-
-This makes the pipeline **location-agnostic** — swapping from local filesystem to cloud storage only requires changing the URI scheme and injecting a different `storage.Client`. The pipeline code itself does not change.
-
-```go
-// URI parsing
-type URI string
-
-func (u URI) Scheme() string  // "file", "https", ...
-func (u URI) Path() string    // "/absolute/path" or "relative/path"
-func (u URI) Validate() error // checks scheme and path
-```
+A Go library that provides a canonical way to form an indexing pipeline, serving composable interfaces and useful implementations. Build your own implementations, or use prebuilt tools such as **Azure Content Understanding Analyzer** or **OpenAI Enricher** to orchestrate this pipeline.
 
 ---
 
@@ -38,7 +8,7 @@ func (u URI) Validate() error // checks scheme and path
 
 The main flow of this pipeline is:
 
-1. 📥 Reading bytes from an unknown source
+1. 📥 Reading bytes from a source
 2. 🔍 Analyzing the bytes and generating parts
 3. 💾 Storing the parts
 4. ✨ Enriching the parts, optimizing the data form
@@ -49,15 +19,44 @@ The main flow of this pipeline is:
 Input → Analyze → Part Storage → Enrich → Search Indexing
 ```
 
-The library defines interfaces for each stage. Domain teams inject their own implementations via the builder pattern. `analyze` + `part` are **required**; `enrich`, `search`, and `cache` are **optional**.
+The library defines interfaces for each stage. Domain teams inject their own implementations via the builder pattern. `provider` + `analyzer` + `partWriter` are **required**; `enricher`, `searchWriter`, and `cache` are **optional**.
+
+Each component is **self-contained** — it receives its URI (or destination) at construction time and manages its own I/O. The Runner does not pass URIs between stages.
+
+---
+
+## 🔗 URI
+
+Every I/O boundary is addressed by a **URI** (`urio.URI`). There are no raw file paths or opaque strings — every source and destination is expressed as a typed URI.
+
+```
+file://cowboys.pdf       → input source on local filesystem
+file://parts.json        → part write destination
+file://search.json       → search write destination
+```
+
+The URI scheme determines which implementation handles the I/O:
+
+| Scheme | Example |
+|---|---|
+| `file://` | Local filesystem |
+| `blob://` | Azure Blob Storage |
+
+```go
+type URI string
+
+func (u URI) Scheme() string  // "file", "blob", ...
+func (u URI) Path() string    // path after "://"
+func (u URI) Validate() error // checks scheme and path
+```
 
 ---
 
 ## 📁 Project Structure
 
 ```
-cmd/indexing/          Entry point — assembles Config and runs pipeline
-runner/                Pipeline orchestration (Runner, Config, Context, Wire)
+examples/              Usage examples
+runner/                Pipeline orchestration (Runner, Config, Wire)
 input/                 Input interface + Provider interface
   file/                Filesystem Provider implementation
 analyze/               Analyzer interface
@@ -68,11 +67,9 @@ enrich/                Enricher interface
   openai/              OpenAI-based enrichment (semantification + embeddings)
 search/                SearchDoc + SearchWriter interfaces
   file/                Filesystem JSON SearchWriter
-  es/                  Elasticsearch (placeholder)
 cache/                 Cache + Hasher interfaces
   file/                Filesystem cache implementation
-storage/               Storage abstraction (filesystem, Azure Blob)
-uri/                   URI parsing ({scheme}://{path})
+urio/                  URI parsing ({scheme}://{path})
 mime/                  MIME type utilities
 ```
 
@@ -82,7 +79,7 @@ mime/                  MIME type utilities
 
 | Interface | Required | Role |
 |---|---|---|
-| `Provider` | ✅ Yes | URI → Input |
+| `Provider` | ✅ Yes | Reads source into Input |
 | `Analyzer` | ✅ Yes | Input → []Part |
 | `PartWriter` | ✅ Yes | Persists analyzed Parts |
 | `Enricher` | ⬜ No | Parts → []SearchDoc (noop if absent) |
@@ -98,7 +95,7 @@ type Input interface {
 }
 
 type Provider interface {
-    Provide(ctx context.Context, URI uri.URI) (Input, error)
+    Provide(ctx context.Context) (Input, error)
 }
 
 // 🔍 analyze
@@ -114,7 +111,7 @@ type Part interface {
 }
 
 type PartWriter interface {
-    Write(ctx context.Context, URI uri.URI, parts []Part) error
+    Write(ctx context.Context, parts []Part) error
 }
 
 // ✨ enrich
@@ -128,7 +125,7 @@ type SearchDoc interface {
 }
 
 type SearchWriter interface {
-    Write(ctx context.Context, URI uri.URI, docs []SearchDoc) error
+    Write(ctx context.Context, docs []SearchDoc) error
 }
 
 // ⚡ cache
@@ -145,8 +142,7 @@ The `Runner` executes stages in order and yields `Event`s via `iter.Seq2[Event, 
 
 ```go
 type Event struct {
-    Stage    string           // "provide" | "analyze" | "part" | "enrich" | "search"
-    ICtx     *IndexingContext
+    Stage    string          // "provide" | "analyze" | "part" | "enrich" | "search"
     Duration time.Duration
 }
 ```
@@ -156,28 +152,30 @@ type Event struct {
 ## 🚀 Usage
 
 ```go
-// 1️⃣ Create storage client
-fsClient, _ := storage.NewFileSystemClient("testdata")
+// 1️⃣ Create components with their URIs
+provider, _ := fileinput.NewFileProvider(urio.URI("file://testdata/cowboys.pdf"))
+partWriter, _ := partfile.NewFilePartWriter(urio.URI("file://testdata/parts.json"))
+searchWriter, _ := searchfile.NewFileSearchWriter(urio.URI("file://testdata/search.json"))
+cache := filecache.New("testdata/cache")
+analyzer := cu.New(
+    cu.NewClient(endpoint, apiKey, http.DefaultClient),
+    func(ctx context.Context, name string) (urio.WriteCloser, error) {
+        return cu.NewFileFigWriter(urio.URI("file://testdata/" + name))
+    },
+)
 
 // 2️⃣ Assemble pipeline
 r, _ := runner.New(
-    runner.WithProvider(fileinput.New(fsClient)),
-    runner.WithAnalyzer(cu.New(fsClient, cu.NewClient(endpoint, apiKey, http.DefaultClient))),
-    runner.WithPartWriter(partfile.New(fsClient)),
+    runner.WithProvider(provider),
+    runner.WithAnalyzer(analyzer),
+    runner.WithPartWriter(partWriter),
     runner.WithEnricher(openai.New(oaiApiKey)),
-    runner.WithSearchWriter(searchfile.New(fsClient)),
-    runner.WithCache(filecache.New(fsClient)),
+    runner.WithSearchWriter(searchWriter),
+    runner.WithCache(cache),
 )
 
-// 3️⃣ Create indexing context with URIs
-ictx := runner.NewICtx(
-    "file://cowboys.pdf",   // input source
-    "file://parts.json",    // part write destination
-    "file://search.json",   // search write destination
-)
-
-// 4️⃣ Run pipeline
-for event, err := range r.Run(ctx, ictx) {
+// 3️⃣ Run pipeline
+for event, err := range r.Run(ctx) {
     if err != nil {
         log.Fatalf("failed at %s: %v", event.Stage, err)
     }
@@ -204,7 +202,7 @@ On re-execution, cached stages are skipped automatically if the `Cache` implemen
 
 ## 📦 Dependencies
 
-- **Go 1.23+** — required for `iter.Seq2`
+- **Go 1.25+** — required for `iter.Seq2`
 - `github.com/openai/openai-go` — OpenAI client
 - `github.com/google/uuid` — UUID generation
 - `github.com/invopop/jsonschema` — JSON schema for structured output
@@ -215,13 +213,12 @@ On re-execution, cached stages are skipped automatically if the `Cache` implemen
 
 ```
 runner/    →  input, analyze, part, enrich, search, cache
-analyze/   →  input, part, cache
+analyze/   →  input, part, cache, urio, mime
 enrich/    →  part, search, cache
-input/     →  uri, mime
-part/      →  uri, mime
-search/    →  uri
+input/     →  urio, mime
+part/      →  mime
+search/    →  (independent)
 cache/     →  (independent)
-storage/   →  (independent)
-uri/       →  (independent)
+urio/      →  (independent)
 mime/      →  (independent)
 ```

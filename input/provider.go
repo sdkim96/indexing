@@ -17,16 +17,15 @@ package input
 import (
 	"context"
 	"errors"
-
-	"github.com/sdkim96/indexing/uri"
 )
 
-// Provider reads the data from the source identified by the URI
-// and returns an Input that can be used to read the data.
+// Provider reads the data from the source and returns an Input.
+//
+// For example, a FileProvider can read from file URIs and return an Input that reads from the file.
 type Provider interface {
 
-	// Provide reads the data from the source identified by the URI
-	Provide(ctx context.Context, URI uri.URI) (Input, error)
+	// Provide generates an Input for the pipeline.
+	Provide(ctx context.Context) (Input, error)
 }
 
 var ErrUnsupportedSourceScheme error = errors.New("unsupported source key. check the scheme.")

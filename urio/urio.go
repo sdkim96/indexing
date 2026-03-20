@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package uri
+package urio
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -24,6 +25,13 @@ import (
 // For Example, "file:///path/to/file.txt" or "blob://container/blobname".
 // The Provider or Writer will determine how to handle the URI based on its scheme.
 type URI string
+
+// WriteCloser extends io.WriteCloser with URI awareness.
+// URI() is only guaranteed to be valid after Close() is called.
+type WriteCloser interface {
+	io.WriteCloser
+	URI() URI
+}
 
 // Scheme returns the scheme part of the URI, which is the substring before "://".
 func (u URI) Scheme() string {

@@ -20,7 +20,6 @@ import (
 	"github.com/sdkim96/indexing/cache"
 	"github.com/sdkim96/indexing/part"
 	"github.com/sdkim96/indexing/search"
-	"github.com/sdkim96/indexing/uri"
 )
 
 // NoopEnricher does nothing. Used when no Enricher is provided.
@@ -33,7 +32,7 @@ func (n *NoopEnricher) Enrich(_ context.Context, _ []part.Part, _ cache.Cache) (
 // NoopSearchWriter does nothing. Used when no SearchWriter is provided.
 type NoopSearchWriter struct{}
 
-func (n *NoopSearchWriter) Write(_ context.Context, _ uri.URI, _ []search.SearchDoc) error {
+func (n *NoopSearchWriter) Write(_ context.Context, _ []search.SearchDoc) error {
 	return nil
 }
 

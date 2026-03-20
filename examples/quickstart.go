@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package examples
+package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -27,37 +26,48 @@ import (
 	part "github.com/sdkim96/indexing/part/file"
 	"github.com/sdkim96/indexing/runner"
 	search "github.com/sdkim96/indexing/search/file"
-	"github.com/sdkim96/indexing/storage"
+	"github.com/sdkim96/indexing/urio"
 )
 
 func main() {
-	storage, err := storage.NewFileSystemClient("testdata")
-	if err != nil {
-		panic(err)
-	}
 
 	cuFoundaryAPIKey := os.Getenv("AZURE_AI_FOUNDARY_API_KEY")
 	cuAIServiceEndpoint := os.Getenv("AZURE_AI_SERVICES_ENDPOINT")
 	oaiApiKey := os.Getenv("OPENAI_API_KEY")
 
+	provider, err := input.NewFileProvider(urio.URI("file://testdata/cowboys.pdf"))
+	if err != nil {
+		panic(err)
+	}
+	partWriter, err := part.NewFilePartWriter(urio.URI("file://testdata/parts.json"))
+	if err != nil {
+		panic(err)
+	}
+	searchWriter, err := search.NewFileSearchWriter(urio.URI("file://testdata/search.json"))
+	if err != nil {
+		panic(err)
+	}
+	cache := cache.New("testdata/cache")
+	cuAnalyzer := cu.New(
+		cu.NewClient(cuAIServiceEndpoint, cuFoundaryAPIKey, http.DefaultClient),
+		func(ctx context.Context, name string) (urio.WriteCloser, error) {
+			return cu.NewFileFigWriter(urio.URI("file://testdata/" + name))
+		},
+	)
+
 	r, err := runner.New(
-		runner.WithProvider(input.New(storage)),
-		runner.WithAnalyzer(cu.New(storage, cu.NewClient(cuAIServiceEndpoint, cuFoundaryAPIKey, http.DefaultClient))),
-		runner.WithPartWriter(part.New(storage)),
+		runner.WithProvider(provider),
+		runner.WithAnalyzer(cuAnalyzer),
+		runner.WithPartWriter(partWriter),
 		runner.WithEnricher(oai.New(oaiApiKey)),
-		runner.WithSearchWriter(search.New(storage)),
-		runner.WithCache(cache.New(storage, cache.WithCacheHitCallback(func(key string) { fmt.Println("Cache Hit!!! Key:", key) }))),
+		runner.WithSearchWriter(searchWriter),
+		runner.WithCache(cache),
 	)
 	if err != nil {
 		panic(err)
 	}
 	ctx := context.Background()
-	ictx := runner.NewICtx(
-		runner.WithInputKey("file://cowboys.txt"),
-		runner.WithPartWriteKey("file://parts.json"),
-		runner.WithSearchWriteKey("file://search.json"),
-	)
-	for event, err := range r.Run(ctx, ictx) {
+	for event, err := range r.Run(ctx) {
 		if err != nil {
 			panic(err)
 		}

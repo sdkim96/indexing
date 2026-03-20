@@ -30,15 +30,22 @@ import (
 // Event represents the completion of a single pipeline stage.
 // It is yielded by Runner.Run after each stage completes, regardless of success or failure.
 type Event struct {
-	Stage    string // "provide" | "analyze" | "part" | "enrich" | "search"
-	ICtx     *IndexingContext
+	// Stage is the name of the completed stage.
+	// Possible values: "provide" | "analyze" | "part" | "enrich" | "search"
+	Stage string
+
+	// Duration is the time taken to complete the stage.
 	Duration time.Duration
 }
 
 // Runner executes the indexing pipeline stages in order.
-// It is assembled via New and configured with a Config.
-// Each stage is executed sequentially; the caller controls error handling
-// by deciding whether to continue or abort via the iter.Seq2 iterator.
+//
+// Each component (provider, analyzer, partWriter, enricher, searchWriter)
+// is configured at construction time and already knows its source or destination.
+// The Runner itself does not manage URIs or resource locations —
+// those concerns belong to each component.
+//
+// Use New to construct a Runner with the required components.
 type Runner struct {
 	provider     input.Provider
 	analyzer     analyze.Analyzer
@@ -52,56 +59,54 @@ type Runner struct {
 // It returns an iter.Seq2[Event, error] that the caller ranges over.
 //
 // Stages are executed in order:
-//  1. provide  — resolves the input URI to an Input
+//  1. provide  — reads the source into an Input
 //  2. analyze  — processes the Input into Parts
 //  3. part     — persists the Parts to storage
 //  4. enrich   — enriches Parts into SearchDocs
-//  5. search   — writes SearchDocs to the search engine
+//  5. search   — writes SearchDocs to the search index
 //
 // If a stage returns an error, it is yielded alongside the Event.
 // The caller decides whether to abort by returning false from the range body.
 //
 // Example:
 //
-//	for event, err := range r.Run(ctx, ictx) {
+//	for event, err := range r.Run(ctx) {
 //	    if err != nil {
-//	        log.Fatalf("failed at %s: %v", event.Stage, err)
+//	        log.Fatalf("stage %s failed: %v", event.Stage, err)
 //	    }
 //	    log.Printf("stage %s done in %s", event.Stage, event.Duration)
 //	}
-func (r *Runner) Run(ctx context.Context, ictx *IndexingContext) iter.Seq2[Event, error] {
+func (r *Runner) Run(ctx context.Context) iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
 
 		start := time.Now()
-		input, err := r.provider.Provide(ctx, ictx.InputKey)
-		if !yield(Event{"provide", ictx, time.Since(start)}, err) {
+		inp, err := r.provider.Provide(ctx)
+		if !yield(Event{"provide", time.Since(start)}, err) {
 			return
 		}
-		defer input.Close()
+		defer inp.Close()
 
 		start = time.Now()
-		parts, err := r.analyzer.Analyze(ctx, input, r.cache)
-		if !yield(Event{"analyze", ictx, time.Since(start)}, err) {
-			return
-		}
-		ictx.Parts = parts
-
-		start = time.Now()
-		err = r.partWriter.Write(ctx, ictx.PartWriteKey, ictx.Parts)
-		if !yield(Event{"part", ictx, time.Since(start)}, err) {
+		parts, err := r.analyzer.Analyze(ctx, inp, r.cache)
+		if !yield(Event{"analyze", time.Since(start)}, err) {
 			return
 		}
 
 		start = time.Now()
-		docs, err := r.enricher.Enrich(ctx, ictx.Parts, r.cache)
-		if !yield(Event{"enrich", ictx, time.Since(start)}, err) {
+		err = r.partWriter.Write(ctx, parts)
+		if !yield(Event{"part", time.Since(start)}, err) {
 			return
 		}
-		ictx.SearchDocs = docs
 
 		start = time.Now()
-		err = r.searchWriter.Write(ctx, ictx.SearchWriteKey, ictx.SearchDocs)
-		if !yield(Event{"search", ictx, time.Since(start)}, err) {
+		docs, err := r.enricher.Enrich(ctx, parts, r.cache)
+		if !yield(Event{"enrich", time.Since(start)}, err) {
+			return
+		}
+
+		start = time.Now()
+		err = r.searchWriter.Write(ctx, docs)
+		if !yield(Event{"search", time.Since(start)}, err) {
 			return
 		}
 	}

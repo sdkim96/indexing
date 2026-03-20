@@ -16,8 +16,6 @@ package search
 
 import (
 	"context"
-
-	"github.com/sdkim96/indexing/uri"
 )
 
 // SearchDoc represents a document to be indexed in the search engine. It contains the fields that will be stored and searchable.
@@ -31,7 +29,6 @@ type SearchDoc interface {
 // SearchWriter writes SearchDocs to a search engine.
 type SearchWriter interface {
 
-	// Write takes a list of SearchDocs and writes them to the specified URI,
-	// which identifies the search engine or index where the documents should be stored.
-	Write(ctx context.Context, URI uri.URI, docs []SearchDoc) error
+	// Write takes a list of SearchDocs and writes them to the search engine.
+	Write(ctx context.Context, docs []SearchDoc) error
 }

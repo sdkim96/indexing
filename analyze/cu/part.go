@@ -22,7 +22,7 @@ import (
 
 	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/part"
-	"github.com/sdkim96/indexing/uri"
+	"github.com/sdkim96/indexing/urio"
 )
 
 type Role string
@@ -176,7 +176,7 @@ func NewTextPart(role Role, page, offset int, text string, headings []string) pa
 	}
 }
 
-func NewImageURLPart(page, offset int, caption string, uri uri.URI, mimeType mime.Type, headings []string) part.Part {
+func NewImageURLPart(page, offset int, caption string, uri urio.URI, mimeType mime.Type, headings []string) part.Part {
 	return &CUPart{
 		role:            RoleImage,
 		data:            ImageData{Type: ImageDataType, Text: caption, Image: Image{URI: uri}},

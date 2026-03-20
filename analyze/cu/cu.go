@@ -19,20 +19,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/sdkim96/indexing/analyze"
 	"github.com/sdkim96/indexing/cache"
 	"github.com/sdkim96/indexing/input"
 	"github.com/sdkim96/indexing/part"
-	"github.com/sdkim96/indexing/storage"
+	"github.com/sdkim96/indexing/urio"
 )
 
 const MaxPollInterval = 60 * time.Second
 
 type CU struct {
-	storage          storage.Client
 	http             *HTTPClient
+	figWriter        func(ctx context.Context, name string) (urio.WriteCloser, error)
 	pollCallbackFunc func(status OperationStatus)
 	pollInterval     time.Duration
 }
@@ -40,13 +42,13 @@ type CU struct {
 var _ analyze.Analyzer = (*CU)(nil)
 
 func New(
-	storage storage.Client,
 	http *HTTPClient,
+	figWriter func(ctx context.Context, name string) (urio.WriteCloser, error),
 	opts ...CUOptions,
 ) *CU {
 	cu := &CU{
-		storage: storage,
-		http:    http,
+		figWriter: figWriter,
+		http:      http,
 	}
 	for _, opt := range opts {
 		opt(cu)
@@ -67,6 +69,41 @@ func WithPollInterval(interval time.Duration) CUOptions {
 		cu.pollInterval = interval
 	}
 }
+
+type FileFigWriter struct {
+	f   *os.File
+	uri urio.URI
+}
+
+func NewFileFigWriter(uri urio.URI) (*FileFigWriter, error) {
+	path := uri.Path()
+
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create directories for %s: %w", path, err)
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file for writing %s: %w", path, err)
+	}
+
+	return &FileFigWriter{
+		f:   f,
+		uri: uri,
+	}, nil
+}
+
+func (w FileFigWriter) Write(p []byte) (n int, err error) {
+	return w.f.Write(p)
+}
+func (w FileFigWriter) Close() error {
+	return w.f.Close()
+}
+func (w FileFigWriter) URI() urio.URI {
+	return w.uri
+}
+
+var _ urio.WriteCloser = (*FileFigWriter)(nil)
 
 type Blob struct {
 	Data []byte
@@ -113,7 +150,7 @@ func (cu *CU) Analyze(ctx context.Context, inp input.Input, c cache.Cache) ([]pa
 		return nil, err
 	}
 
-	return ConvertToParts(ctx, op, cu.http, cu.storage)
+	return ConvertToParts(ctx, op, cu.http, cu.figWriter)
 }
 
 func (cu *CU) poll(ctx context.Context, opLocation string) (*Operation, error) {

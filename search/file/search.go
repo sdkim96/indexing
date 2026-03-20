@@ -18,41 +18,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
-	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/search"
-	"github.com/sdkim96/indexing/storage"
-	"github.com/sdkim96/indexing/uri"
+	"github.com/sdkim96/indexing/urio"
 )
 
 type FileSearchWriter struct {
-	client *storage.FileSystemClient
+	uri urio.URI
 }
 
-func New(client *storage.FileSystemClient) FileSearchWriter {
-	return FileSearchWriter{client: client}
+func NewFileSearchWriter(uri urio.URI) (FileSearchWriter, error) {
+	if uri.Scheme() != "file" {
+		return FileSearchWriter{}, fmt.Errorf("unsupported URI scheme: %s. expected 'file'", uri.Scheme())
+	}
+	return FileSearchWriter{uri: uri}, nil
 }
 
 var _ search.SearchWriter = (*FileSearchWriter)(nil)
 
-func (w FileSearchWriter) Write(ctx context.Context, URI uri.URI, docs []search.SearchDoc) error {
-	if err := URI.Validate(); err != nil {
-		return err
-	}
-	if scheme := URI.Scheme(); scheme != "file" {
-		return fmt.Errorf("The scheme must be file://. Check your URI: %s", string(URI))
-	}
-	fp, _, err := w.client.Create(ctx, URI.Path(), mime.MimeJSON)
+func (w FileSearchWriter) Write(ctx context.Context, docs []search.SearchDoc) error {
+	f, err := os.OpenFile(w.uri.Path(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to write search docs to file: %w", err)
 	}
-	defer fp.Close()
-	data, err := json.MarshalIndent(docs, "", "  ")
+	defer f.Close()
+	err = json.NewEncoder(f).Encode(docs)
 	if err != nil {
-		return err
-	}
-	if _, err := fp.Write(data); err != nil {
-		return err
+		return fmt.Errorf("failed to encode search docs to JSON: %w", err)
 	}
 	return nil
 }

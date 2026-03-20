@@ -16,44 +16,41 @@ package file
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/sdkim96/indexing/input"
 	"github.com/sdkim96/indexing/mime"
-	"github.com/sdkim96/indexing/storage"
-	"github.com/sdkim96/indexing/uri"
+	"github.com/sdkim96/indexing/urio"
 )
 
 type FileProvider struct {
-	client *storage.FileSystemClient
+	uri urio.URI
 }
 
-func New(client *storage.FileSystemClient) FileProvider {
-	return FileProvider{client: client}
+func NewFileProvider(uri urio.URI) (FileProvider, error) {
+	if uri.Scheme() != "file" {
+		return FileProvider{}, fmt.Errorf("unsupported URI scheme: %s. expected 'file'", uri.Scheme())
+	}
+	return FileProvider{uri: uri}, nil
 }
 
 var _ input.Provider = (*FileProvider)(nil)
 
-type FileMeta struct {
-	name string
-	size int64
-}
-
-// FileProvider assumes that the form of key must be "file://{path}" and provides FileInput.
-func (p FileProvider) Provide(ctx context.Context, URI uri.URI) (input.Input, error) {
-	if err := URI.Validate(); err != nil {
-		return nil, input.ErrInvalidSourceKey
-	}
-	if URI.Scheme() != "file" {
-		return nil, input.ErrUnsupportedSourceScheme
-	}
-
-	f, meta, err := p.client.Open(ctx, URI.Path())
+// Provide opens the file at the URI given at construction time and returns a FileInput.
+func (p FileProvider) Provide(ctx context.Context) (input.Input, error) {
+	f, err := os.Open(p.uri.Path())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read search docs from file: %w", err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
 	var m map[string]any = map[string]any{
-		"name": meta.FileName,
-		"size": meta.Size,
+		"name": info.Name(),
+		"size": info.Size(),
 	}
-	return NewFileInput(f, mime.GuessMimeType(URI.Path()), m), nil
+	return NewFileInput(f, mime.GuessMimeType(p.uri.Path()), m), nil
+
 }

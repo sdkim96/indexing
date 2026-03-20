@@ -14,7 +14,7 @@
 
 package cu
 
-import "github.com/sdkim96/indexing/uri"
+import "github.com/sdkim96/indexing/urio"
 
 type DataType string
 
@@ -60,5 +60,5 @@ func (t TableData) GetText() string   { return t.Text }
 func (t TableData) Raw() any          { return t.Table }
 
 type Image struct {
-	URI uri.URI `json:"uri,omitempty"`
+	URI urio.URI `json:"uri,omitempty"`
 }

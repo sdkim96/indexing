@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/sdkim96/indexing/mime"
-	"github.com/sdkim96/indexing/uri"
 )
 
 // Part represents a piece of content extracted from the input data. These are the basic units that will be enriched and indexed.
@@ -40,9 +39,9 @@ type Part interface {
 	Raw() []byte
 }
 
-// PartWriter writes Parts to a destination identified by a URI, such as a database or file storage.
+// PartWriter writes Parts to a destination identified by a store, such as a database or file storage.
 type PartWriter interface {
 
-	// Write takes a list of Parts and writes them to the specified URI.
-	Write(ctx context.Context, URI uri.URI, parts []Part) error
+	// Write takes a list of Parts and writes them to the specified store.
+	Write(ctx context.Context, parts []Part) error
 }

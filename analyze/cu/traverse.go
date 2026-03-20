@@ -26,8 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/part"
-	"github.com/sdkim96/indexing/storage"
-	"github.com/sdkim96/indexing/uri"
+	"github.com/sdkim96/indexing/urio"
 )
 
 type figureRequest struct {
@@ -41,7 +40,7 @@ type figureRequest struct {
 	headings   []string
 }
 
-func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, storage storage.Client) ([]part.Part, error) {
+func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, figWriter func(ctx context.Context, name string) (urio.WriteCloser, error)) ([]part.Part, error) {
 	if result.Result == nil {
 		return nil, fmt.Errorf("operation %q result is nil: check if the operation completed successfully", result.ID)
 	}
@@ -68,7 +67,7 @@ func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, sto
 	}
 
 	for _, req := range figureRequests {
-		uri, mimeType, err := uploadFigure(ctx, req, http, storage)
+		uri, mimeType, err := uploadFigure(ctx, req, http, figWriter)
 		if err != nil {
 			pt := NewTextPart(RoleImage, req.page, req.offset, req.caption, req.headings)
 			parts = append(parts, pt)
@@ -81,7 +80,7 @@ func ConvertToParts(ctx context.Context, result Operation, http *HTTPClient, sto
 	return parts, nil
 }
 
-func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, storage storage.Client) (uri uri.URI, mimeType mime.Type, err error) {
+func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, figWriter func(ctx context.Context, name string) (urio.WriteCloser, error)) (uri urio.URI, mimeType mime.Type, err error) {
 	data, contentType, err := http.GetFigure(ctx, FigureRequest{
 		OpID:       req.opID,
 		ContentIdx: req.contentIdx,
@@ -93,8 +92,7 @@ func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, stor
 
 	ext := mime.GuessExtension(contentType)
 	storageKey := fmt.Sprintf("figures/%s/%s%s", req.fileID, req.figureID, ext)
-
-	w, uri, err := storage.Create(ctx, storageKey, contentType)
+	w, err := figWriter(ctx, storageKey)
 	if err != nil {
 		return "", "", err
 	}
@@ -104,7 +102,7 @@ func uploadFigure(ctx context.Context, req figureRequest, http *HTTPClient, stor
 		return "", "", err
 	}
 
-	return uri, contentType, nil
+	return w.URI(), contentType, nil
 }
 
 type traverseCtx struct {

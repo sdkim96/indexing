@@ -18,44 +18,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
-	"github.com/sdkim96/indexing/mime"
 	"github.com/sdkim96/indexing/part"
-	"github.com/sdkim96/indexing/storage"
-	"github.com/sdkim96/indexing/uri"
+	"github.com/sdkim96/indexing/urio"
 )
 
 type FilePartWriter struct {
-	client *storage.FileSystemClient
+	uri urio.URI
 }
 
-func New(client *storage.FileSystemClient) FilePartWriter {
-	return FilePartWriter{client: client}
+func NewFilePartWriter(uri urio.URI) (FilePartWriter, error) {
+	if uri.Scheme() != "file" {
+		return FilePartWriter{}, fmt.Errorf("unsupported URI scheme: %s. expected 'file'", uri.Scheme())
+	}
+	return FilePartWriter{uri: uri}, nil
 }
 
 var _ part.PartWriter = (*FilePartWriter)(nil)
 
-func (w FilePartWriter) Write(ctx context.Context, URI uri.URI, parts []part.Part) error {
-	if err := URI.Validate(); err != nil {
-		return err
-	}
-	if scheme := URI.Scheme(); scheme != "file" {
-		return fmt.Errorf("The scheme must be file://. Check your URI: %s", string(URI))
-	}
-
-	fp, _, err := w.client.Create(ctx, URI.Path(), mime.MimeJSON)
+func (w FilePartWriter) Write(ctx context.Context, parts []part.Part) error {
+	f, err := os.OpenFile(w.uri.Path(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to write search docs to file: %w", err)
 	}
-	defer fp.Close()
-
-	data, err := json.Marshal(parts)
+	defer f.Close()
+	err = json.NewEncoder(f).Encode(parts)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to encode search docs to JSON: %w", err)
 	}
-	if _, err := fp.Write(data); err != nil {
-		return err
-	}
-
 	return nil
 }
