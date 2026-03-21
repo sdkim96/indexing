@@ -25,7 +25,8 @@ import (
 type Provider interface {
 
 	// Provide generates an Input for the pipeline.
-	Provide(ctx context.Context) (Input, error)
+	// The sourceID is an identifier that the Provider can use for logging or as a key for storage.
+	Provide(ctx context.Context, sourceID string) (Input, error)
 }
 
 var ErrUnsupportedSourceScheme error = errors.New("unsupported source key. check the scheme.")

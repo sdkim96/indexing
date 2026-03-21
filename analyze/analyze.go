@@ -32,5 +32,6 @@ import (
 type Analyzer interface {
 
 	// Analyze reads from input, processes the data, and returns the resulting Parts.
-	Analyze(ctx context.Context, input input.Input, cache cache.Cache) ([]part.Part, error)
+	// The sourceID is an identifier that the Analyzer can use for logging or as a key for storage.
+	Analyze(ctx context.Context, sourceID string, input input.Input, cache cache.Cache) ([]part.Part, error)
 }

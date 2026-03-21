@@ -43,5 +43,6 @@ type Part interface {
 type PartWriter interface {
 
 	// Write takes a list of Parts and writes them to the specified store.
-	Write(ctx context.Context, parts []Part) error
+	// The sourceID is a unique identifier of the source (e.g. a file, a provided data stream).
+	Write(ctx context.Context, sourceID string, parts []Part) error
 }

@@ -30,5 +30,6 @@ type SearchDoc interface {
 type SearchWriter interface {
 
 	// Write takes a list of SearchDocs and writes them to the search engine.
-	Write(ctx context.Context, docs []SearchDoc) error
+	// The sourceID is a unique identifier of the source (e.g. a file, a provided data stream).
+	Write(ctx context.Context, sourceID string, docs []SearchDoc) error
 }

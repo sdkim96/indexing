@@ -159,7 +159,7 @@ searchWriter, _ := searchfile.NewFileSearchWriter(urio.URI("file://testdata/sear
 cache := filecache.New("testdata/cache")
 analyzer := cu.New(
     cu.NewClient(endpoint, apiKey, http.DefaultClient),
-    func(ctx context.Context, name string) (urio.WriteCloser, error) {
+    func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error) {
         return cu.NewFileFigWriter(urio.URI("file://testdata/" + name))
     },
 )

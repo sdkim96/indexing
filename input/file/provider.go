@@ -38,7 +38,7 @@ func NewFileProvider(uri urio.URI) (FileProvider, error) {
 var _ input.Provider = (*FileProvider)(nil)
 
 // Provide opens the file at the URI given at construction time and returns a FileInput.
-func (p FileProvider) Provide(ctx context.Context) (input.Input, error) {
+func (p FileProvider) Provide(ctx context.Context, sourceID string) (input.Input, error) {
 	f, err := os.Open(p.uri.Path())
 	if err != nil {
 		return nil, fmt.Errorf("failed to read search docs from file: %w", err)

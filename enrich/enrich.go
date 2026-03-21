@@ -33,5 +33,6 @@ type Enricher interface {
 
 	// Enrich takes a list of document parts, processes them, and returns a list of SearchDoc objects
 	// that contain the enriched information for each topic identified in the document.
-	Enrich(ctx context.Context, parts []part.Part, cache cache.Cache) ([]search.SearchDoc, error)
+	// The sourceID is a unique identifier of the source (e.g. a file, a provided data stream).
+	Enrich(ctx context.Context, sourceID string, parts []part.Part, cache cache.Cache) ([]search.SearchDoc, error)
 }

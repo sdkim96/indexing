@@ -37,7 +37,7 @@ func NewFileSearchWriter(uri urio.URI) (FileSearchWriter, error) {
 
 var _ search.SearchWriter = (*FileSearchWriter)(nil)
 
-func (w FileSearchWriter) Write(ctx context.Context, docs []search.SearchDoc) error {
+func (w FileSearchWriter) Write(ctx context.Context, sourceID string, docs []search.SearchDoc) error {
 	f, err := os.OpenFile(w.uri.Path(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write search docs to file: %w", err)

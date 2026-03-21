@@ -20,6 +20,7 @@ import (
 	"os"
 
 	cu "github.com/sdkim96/indexing/analyze/cu"
+	cuFileFigure "github.com/sdkim96/indexing/analyze/cu/filefigure"
 	cache "github.com/sdkim96/indexing/cache/file"
 	oai "github.com/sdkim96/indexing/enrich/openai"
 	input "github.com/sdkim96/indexing/input/file"
@@ -52,7 +53,7 @@ func main() {
 	cuAnalyzer := cu.New(
 		cu.NewClient(cuAIServiceEndpoint, cuFoundaryAPIKey, http.DefaultClient),
 		func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error) {
-			return cu.NewFileFigWriter(urio.URI("file://testdata/" + name))
+			return cuFileFigure.NewFileFigWriter(urio.URI("file://testdata/" + name))
 		},
 	)
 
@@ -68,7 +69,7 @@ func main() {
 		panic(err)
 	}
 	ctx := context.Background()
-	for event, err := range r.Run(ctx) {
+	for event, err := range r.Run(ctx, "cowboys.pdf") {
 		if err != nil {
 			panic(err)
 		}

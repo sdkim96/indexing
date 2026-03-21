@@ -40,7 +40,7 @@ func New(apiKey string) *OpenAIEnricher {
 // Enrich takes a list of document parts, processes them using OpenAI's API to group related parts together,
 // summarize the content, extract keywords, and generate embeddings. It returns a list of SearchDoc objects
 // that contain the enriched information for each topic identified in the document.
-func (e *OpenAIEnricher) Enrich(ctx context.Context, parts []part.Part, c cache.Cache) ([]search.SearchDoc, error) {
+func (e *OpenAIEnricher) Enrich(ctx context.Context, sourceID string, parts []part.Part, c cache.Cache) ([]search.SearchDoc, error) {
 	oaiClient := openai.NewClient(
 		option.WithAPIKey(e.apiKey),
 	)

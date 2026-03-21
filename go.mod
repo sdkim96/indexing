@@ -3,7 +3,6 @@ module github.com/sdkim96/indexing
 go 1.25.2
 
 require (
-	github.com/google/uuid v1.6.0
 	github.com/invopop/jsonschema v0.13.0
 	github.com/openai/openai-go v1.12.0
 )

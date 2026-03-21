@@ -57,6 +57,8 @@ type Runner struct {
 
 // Run executes the indexing pipeline and yields an Event after each stage completes.
 // It returns an iter.Seq2[Event, error] that the caller ranges over.
+// The sourceID is an identifier that the Runner passes to each stage,
+// which can be used for logging or as a key for storage.
 //
 // Stages are executed in order:
 //  1. provide  — reads the source into an Input
@@ -70,42 +72,42 @@ type Runner struct {
 //
 // Example:
 //
-//	for event, err := range r.Run(ctx) {
+//	for event, err := range r.Run(ctx, sourceID) {
 //	    if err != nil {
 //	        log.Fatalf("stage %s failed: %v", event.Stage, err)
 //	    }
 //	    log.Printf("stage %s done in %s", event.Stage, event.Duration)
 //	}
-func (r *Runner) Run(ctx context.Context) iter.Seq2[Event, error] {
+func (r *Runner) Run(ctx context.Context, sourceID string) iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
 
 		start := time.Now()
-		inp, err := r.provider.Provide(ctx)
+		inp, err := r.provider.Provide(ctx, sourceID)
 		if !yield(Event{"provide", time.Since(start)}, err) {
 			return
 		}
 		defer inp.Close()
 
 		start = time.Now()
-		parts, err := r.analyzer.Analyze(ctx, inp, r.cache)
+		parts, err := r.analyzer.Analyze(ctx, sourceID, inp, r.cache)
 		if !yield(Event{"analyze", time.Since(start)}, err) {
 			return
 		}
 
 		start = time.Now()
-		err = r.partWriter.Write(ctx, parts)
+		err = r.partWriter.Write(ctx, sourceID, parts)
 		if !yield(Event{"part", time.Since(start)}, err) {
 			return
 		}
 
 		start = time.Now()
-		docs, err := r.enricher.Enrich(ctx, parts, r.cache)
+		docs, err := r.enricher.Enrich(ctx, sourceID, parts, r.cache)
 		if !yield(Event{"enrich", time.Since(start)}, err) {
 			return
 		}
 
 		start = time.Now()
-		err = r.searchWriter.Write(ctx, docs)
+		err = r.searchWriter.Write(ctx, sourceID, docs)
 		if !yield(Event{"search", time.Since(start)}, err) {
 			return
 		}

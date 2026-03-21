@@ -205,10 +205,3 @@ type Operation struct {
 	Status OperationStatus `json:"status"`
 	Result *AnalysisResult `json:"result,omitempty"`
 }
-
-type FigureRequest struct {
-	OpID       string
-	ContentIdx int
-	FigureID   string
-	S3Key      string
-}

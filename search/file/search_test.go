@@ -53,5 +53,5 @@ func TestSearchWriter_Write(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create FileSearchWriter: %v", err)
 	}
-	writer.Write(context.Background(), newDocs())
+	writer.Write(context.Background(), "newDocs", newDocs())
 }

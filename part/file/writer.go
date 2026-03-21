@@ -37,7 +37,7 @@ func NewFilePartWriter(uri urio.URI) (FilePartWriter, error) {
 
 var _ part.PartWriter = (*FilePartWriter)(nil)
 
-func (w FilePartWriter) Write(ctx context.Context, parts []part.Part) error {
+func (w FilePartWriter) Write(ctx context.Context, sourceID string, parts []part.Part) error {
 	f, err := os.OpenFile(w.uri.Path(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write search docs to file: %w", err)

@@ -19,8 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/sdkim96/indexing/analyze"
@@ -33,18 +31,18 @@ import (
 
 const MaxPollInterval = 60 * time.Second
 
+type FigureWriter func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error)
+
 type CU struct {
 	http             *HTTPClient
-	figWriter        func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error)
+	figWriter        FigureWriter
 	pollCallbackFunc func(status OperationStatus)
 	pollInterval     time.Duration
 }
 
-var _ analyze.Analyzer = (*CU)(nil)
-
 func New(
 	http *HTTPClient,
-	figWriter func(ctx context.Context, name string, mimeType mime.Type) (urio.WriteCloser, error),
+	figWriter FigureWriter,
 	opts ...CUOptions,
 ) *CU {
 	cu := &CU{
@@ -56,6 +54,8 @@ func New(
 	}
 	return cu
 }
+
+var _ analyze.Analyzer = (*CU)(nil)
 
 type CUOptions func(*CU)
 
@@ -70,41 +70,6 @@ func WithPollInterval(interval time.Duration) CUOptions {
 		cu.pollInterval = interval
 	}
 }
-
-type FileFigWriter struct {
-	f   *os.File
-	uri urio.URI
-}
-
-func NewFileFigWriter(uri urio.URI) (*FileFigWriter, error) {
-	path := uri.Path()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directories for %s: %w", path, err)
-	}
-
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file for writing %s: %w", path, err)
-	}
-
-	return &FileFigWriter{
-		f:   f,
-		uri: uri,
-	}, nil
-}
-
-func (w FileFigWriter) Write(p []byte) (n int, err error) {
-	return w.f.Write(p)
-}
-func (w FileFigWriter) Close() error {
-	return w.f.Close()
-}
-func (w FileFigWriter) URI() urio.URI {
-	return w.uri
-}
-
-var _ urio.WriteCloser = (*FileFigWriter)(nil)
 
 type Blob struct {
 	Data []byte
@@ -121,7 +86,7 @@ func (b *Blob) FingerPrint(prefix string) string {
 
 var _ cache.Hasher = (*Blob)(nil)
 
-func (cu *CU) Analyze(ctx context.Context, inp input.Input, c cache.Cache) ([]part.Part, error) {
+func (cu *CU) Analyze(ctx context.Context, sourceID string, inp input.Input, c cache.Cache) ([]part.Part, error) {
 	data, err := io.ReadAll(inp)
 	if err != nil {
 		return nil, err
@@ -151,7 +116,7 @@ func (cu *CU) Analyze(ctx context.Context, inp input.Input, c cache.Cache) ([]pa
 		return nil, err
 	}
 
-	return ConvertToParts(ctx, op, cu.http, cu.figWriter)
+	return ConvertToParts(ctx, sourceID, op, cu.http, cu.figWriter)
 }
 
 func (cu *CU) poll(ctx context.Context, opLocation string) (*Operation, error) {

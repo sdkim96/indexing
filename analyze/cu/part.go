@@ -25,6 +25,8 @@ import (
 	"github.com/sdkim96/indexing/urio"
 )
 
+// --- Role ---
+
 type Role string
 
 const (
@@ -39,6 +41,57 @@ const (
 	RoleFootnote       Role = "footnote"
 	RoleFormulaBlock   Role = "formulaBlock"
 )
+
+// --- Data types ---
+
+type DataType string
+
+const (
+	TextDataType  DataType = "text"
+	ImageDataType DataType = "image"
+	TableDataType DataType = "table"
+)
+
+type Data interface {
+	GetText() string
+	Raw() any
+	GetType() DataType
+}
+
+type TextData struct {
+	Type DataType `json:"type"`
+	Text string   `json:"text"`
+}
+
+func (t TextData) GetType() DataType { return TextDataType }
+func (t TextData) GetText() string   { return t.Text }
+func (t TextData) Raw() any          { return t.Text }
+
+type ImageData struct {
+	Type  DataType `json:"type"`
+	Text  string   `json:"text"`
+	Image Image    `json:"image"`
+}
+
+func (i ImageData) GetType() DataType { return ImageDataType }
+func (i ImageData) GetText() string   { return i.Text }
+func (i ImageData) Raw() any          { return i.Image }
+
+type TableData struct {
+	Type  DataType       `json:"type"`
+	Text  string         `json:"text"`
+	Table map[string]any `json:"table"`
+}
+
+func (t TableData) GetType() DataType { return TableDataType }
+func (t TableData) GetText() string   { return t.Text }
+func (t TableData) Raw() any          { return t.Table }
+
+type Image struct {
+	URI urio.URI `json:"uri,omitempty"`
+}
+
+// --- CUPart ---
 
 var _ part.Part = (*CUPart)(nil)
 
@@ -163,6 +216,8 @@ func (p *CUPart) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+// --- Constructors ---
 
 func NewTextPart(role Role, page, offset int, text string, headings []string) part.Part {
 	return &CUPart{

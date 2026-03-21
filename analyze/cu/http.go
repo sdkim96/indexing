@@ -37,6 +37,13 @@ func figureURL(endpoint, opID string, contentIdx int, figureID string) string {
 	return fmt.Sprintf(endpoint+GetFigureEndpointPath, opID, contentIdx, figureID)
 }
 
+type FigureRequest struct {
+	OpID       string
+	ContentIdx int
+	FigureID   string
+	S3Key      string
+}
+
 type HTTPClient struct {
 	client   *http.Client
 	endpoint string
