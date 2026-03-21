@@ -55,9 +55,11 @@ func uploadFigure(
 	if err != nil {
 		return "", "", err
 	}
-	defer w.Close()
-
 	if _, err = io.Copy(w, bytes.NewReader(data)); err != nil {
+		return "", "", err
+	}
+	err = w.Close()
+	if err != nil {
 		return "", "", err
 	}
 
